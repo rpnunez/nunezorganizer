@@ -13,7 +13,6 @@ use Illuminate\Support\Str;
 use Laravel\Fortify\Fortify;
 use Livewire\Livewire;
 
-
 class FortifyServiceProvider extends ServiceProvider
 {
     /**
