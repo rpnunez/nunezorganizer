@@ -46,7 +46,7 @@ flock -n 9 || die "another release/rollback is running (lock: $APP_ROOT/.deploy.
 
 # ---------------------------------------------------------------- preflight
 log "preflight"
-APP_USER="$APP_USER" "$DEPLOY_SELF_DIR/check-env.sh" "$SHARED_DIR/.env"
+APP_USER="$APP_USER" PHP_BIN="$PHP_BIN" "$DEPLOY_SELF_DIR/check-env.sh" "$SHARED_DIR/.env"
 php_id="$("$PHP_BIN" -r 'echo PHP_VERSION_ID;')"
 (( php_id >= ${PHP_MIN_VERSION_ID:-80400} )) || die "$PHP_BIN is PHP_VERSION_ID $php_id, need >= ${PHP_MIN_VERSION_ID:-80400}"
 missing=""
@@ -77,12 +77,23 @@ REL="$RELEASES_DIR/$NAME"
 PREV="$(current_release)"
 [[ ! -e "$REL" ]] || die "release dir already exists: $REL"
 
+MIGRATION_STARTED=0
 cleanup_failed() {
   local rc=$?
   if [[ $rc -ne 0 && -n "${REL:-}" && -d "$REL" && "$(current_release)" != "$NAME" ]]; then
-    warn "release failed (exit $rc); removing $REL"
-    rm -rf -- "$REL"
-    record "FAILED $NAME ref=$REF"
+    if [[ $MIGRATION_STARTED -eq 1 ]]; then
+      # The schema may already be on this release's migrations. Keep the code that
+      # can undo them (migrate:rollback must run from this directory).
+      touch "$REL/.failed-release"
+      record "FAILED-AFTER-MIGRATIONS $NAME ref=$REF sha=$SHA migrated=1 kept=releases/$NAME"
+      warn "release failed (exit $rc) AFTER migrations ran; the database may be on the new schema."
+      warn "Kept releases/$NAME. Fix and re-release, or undo the schema from that directory:"
+      warn "  cd $REL && $PHP_BIN artisan migrate:rollback --step=<n>   (see docs/runbook.md#rollback)"
+    else
+      warn "release failed (exit $rc); removing $REL"
+      rm -rf -- "$REL"
+      record "FAILED $NAME ref=$REF"
+    fi
   fi
   if [[ $rc -ne 0 && "${WENT_DOWN:-0}" == "1" && -n "$PREV" ]]; then
     warn "bringing the app back up (it was put in maintenance mode)"
@@ -95,6 +106,9 @@ log "exporting $REF ($SHA) -> releases/$NAME"
 mkdir -p "$REL"
 git --git-dir="$REPO_MIRROR" archive --format=tar "$SHA" | tar -x -C "$REL"
 printf '%s\n' "$SHA" > "$REL/REVISION"
+# The web server (not APP_USER) serves public/: it must traverse the release and read
+# public/, whatever umask this shell has. Everything else stays owner-only as extracted.
+chmod 711 "$RELEASES_DIR" "$REL"
 [[ -f "$REL/artisan" ]] || die "ref $REF does not contain a Laravel app (no artisan)"
 
 # ---------------------------------------------------------------- shared files
@@ -111,6 +125,7 @@ log "npm ci && npm run build"
 (cd "$REL" && "${NPM_BIN:-npm}" ci --no-audit --no-fund && "${NPM_BIN:-npm}" run build)
 rm -rf -- "$REL/node_modules"
 [[ -d "$REL/public/build" ]] || die "asset build produced no public/build"
+chmod -R go+rX "$REL/public"
 
 # ---------------------------------------------------------------- migrations gate
 log "checking for pending migrations"
@@ -128,6 +143,7 @@ else
     artisan "$RELEASES_DIR/$PREV" down --retry=15 && WENT_DOWN=1
   fi
   log "running migrations"
+  MIGRATION_STARTED=1
   artisan "$REL" migrate --force --no-interaction
   MIGRATED=1
 fi

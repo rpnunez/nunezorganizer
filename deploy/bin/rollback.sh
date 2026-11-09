@@ -44,7 +44,11 @@ flock -n 9 || die "another release/rollback is running"
 if [[ -z "$TARGET" ]]; then
   for (( i = ${#all[@]} - 1; i >= 0; i-- )); do
     if [[ "${all[$i]}" == "$CUR" ]]; then
-      (( i > 0 )) && TARGET="${all[$((i - 1))]}"
+      for (( j = i - 1; j >= 0; j-- )); do
+        [[ -e "$RELEASES_DIR/${all[$j]}/.failed-release" ]] && continue
+        TARGET="${all[$j]}"
+        break
+      done
       break
     fi
   done
@@ -52,6 +56,7 @@ if [[ -z "$TARGET" ]]; then
 fi
 [[ "$TARGET" == "$CUR" ]] && die "$TARGET is already current"
 [[ -d "$RELEASES_DIR/$TARGET" ]] || die "release not found: $TARGET"
+[[ ! -e "$RELEASES_DIR/$TARGET/.failed-release" ]] || die "$TARGET is a failed release (kept only for migrate:rollback); pick another"
 
 if grep -q "ACTIVATED $CUR .*migrated=1" "$DEPLOY_LOG_DIR/releases.log" 2>/dev/null; then
   warn "$CUR ran migrations when it was released. Rolling back code only; the schema stays as it is."

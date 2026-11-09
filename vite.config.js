@@ -39,15 +39,23 @@ export default defineConfig({
         cors: true,
         ...dockerServer,
         watch: {
-            // Bind mounts from Windows/macOS hosts don't deliver file events into containers.
+            // Bind mounts from Windows/macOS hosts don't deliver file events into containers,
+            // so poll there; the ignore list keeps polling to the directories assets come from.
             usePolling: Boolean(process.env.VITE_DOCKER),
+            interval: 300,
             ignored: [
                 '**/.agents/**',
                 '**/.claude/**',
                 '**/.cursor/**',
                 '**/.junie/**',
-                '**/storage/framework/views/**',
+                '**/storage/**',
+                '**/bootstrap/cache/**',
                 '**/vendor/**',
+                '**/tests/**',
+                '**/database/**',
+                '**/deploy/**',
+                '**/docs/**',
+                '**/docker/**',
             ],
         },
     },

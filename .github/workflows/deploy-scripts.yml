@@ -6,12 +6,16 @@ on:
       - "deploy/**"
       - "setup.php"
       - ".env.example"
+      - "docker-compose.yml"
+      - "docker/**"
       - ".github/workflows/deploy-scripts.yml"
   push:
     branches: [master]
     paths:
       - "deploy/**"
       - "setup.php"
+      - "docker-compose.yml"
+      - "docker/**"
 
 permissions:
   contents: read

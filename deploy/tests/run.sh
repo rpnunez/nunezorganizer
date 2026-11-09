@@ -24,18 +24,22 @@ export NUNEZ_ALLOW_ANY_USER=1 HEALTHCHECK_DELAY_SECONDS=0 GIT_CONFIG_NOSYSTEM=1
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 
 # ------------------------------------------------------------------ stubs
+REAL_PHP="$(command -v php || true)"
 STUBS="$T/stubs"; mkdir -p "$STUBS"
 CALLS="$T/calls.log"; : > "$CALLS"
-export CALLS FAKE_PENDING=0 FAKE_HEALTH=200 FAKE_PHP_ID=80406
+export CALLS REAL_PHP FAKE_PENDING=0 FAKE_HEALTH=200 FAKE_PHP_ID=80406
 
 cat > "$STUBS/php" <<'EOF'
 #!/usr/bin/env bash
+# setup.php (used by check-env.sh) runs on the real PHP.
+if [[ "$1" == *setup.php ]]; then exec "$REAL_PHP" "$@"; fi
 if [[ "$1" == "-r" ]]; then echo "$FAKE_PHP_ID"; exit 0; fi
 if [[ "$1" == "-m" ]]; then printf '%s\n' bcmath ctype curl dom fileinfo intl mbstring openssl pcntl pdo_mysql tokenizer xml "Zend OPcache"; exit 0; fi
 if [[ "$1" == "artisan" ]]; then
   shift
   echo "artisan $* @ $(basename "$(pwd -P)")" >> "$CALLS"
   case "$1" in
+    optimize) [[ -n "${FAKE_OPTIMIZE_FAIL:-}" ]] && exit 1 ;;
     migrate)
       if [[ " $* " == *" --pretend "* ]]; then
         if [[ "$FAKE_PENDING" == "1" ]]; then echo "2026_01_01_000000_create_tasks ... create table tasks"; else echo "INFO  Nothing to migrate."; fi
@@ -170,7 +174,7 @@ if "$BIN/check-env.sh" "$ENVF" 2>&1 | grep -q 0123456789abcdef; then bad "check-
 
 echo "== release"
 current() { basename "$(readlink "$APP_ROOT/current")"; }
-check "first release" "$BIN/release.sh"
+check "first release (umask 077)" bash -c "umask 077; '$BIN/release.sh'"
 R1="$(current)"
 check "current -> releases/<ts>-<sha>" test -f "$APP_ROOT/current/artisan"
 check "symlink target is relative" bash -c "[[ \$(readlink '$APP_ROOT/current') == releases/* ]]"
@@ -179,6 +183,9 @@ check ".env is shared" test "$(readlink "$APP_ROOT/current/.env")" = "$APP_ROOT/
 check "node_modules removed" test ! -e "$APP_ROOT/current/node_modules"
 check "assets built" test -f "$APP_ROOT/current/public/build/manifest.json"
 check "REVISION written" test -s "$APP_ROOT/current/REVISION"
+check "releases/ traversable by web server (711)" test "$(stat -c %a "$APP_ROOT/releases")" = 711
+check "release dir traversable by web server (711)" test "$(stat -c %a "$APP_ROOT/releases/$R1")" = 711
+check "public assets readable by others" bash -c "[[ \$(stat -c %a '$APP_ROOT/current/public/build/manifest.json') =~ [4-7]\$ ]]"
 check "composer --no-dev" grep -q 'composer install --no-dev' "$CALLS"
 check "optimize ran" grep -q "artisan optimize @ $R1" "$CALLS"
 check "queue:restart ran" grep -q 'artisan queue:restart' "$CALLS"
@@ -205,6 +212,14 @@ check_not "unhealthy release fails" "$BIN/release.sh"
 check "auto-rollback to previous" test "$(current)" = "$R2"
 check "auto-rollback logged" grep -q "AUTO-ROLLBACK .* -> $R2" "$APP_ROOT/shared/logs/releases.log"
 FAKE_HEALTH=200
+
+sleep 1; commit v3b; FAKE_PENDING=1; export FAKE_OPTIMIZE_FAIL=1
+check_not "failure after migrations fails the release" "$BIN/release.sh" --migrate
+FAILED_REL="$(grep -o 'FAILED-AFTER-MIGRATIONS [^ ]*' "$APP_ROOT/shared/logs/releases.log" | tail -n1 | cut -d' ' -f2)"
+check "failed-after-migrations release is kept" test -f "$APP_ROOT/releases/$FAILED_REL/.failed-release"
+check "current unchanged after post-migration failure" test "$(current)" = "$R2"
+check_not "rollback --to a failed release refused" "$BIN/rollback.sh" --to "$FAILED_REL"
+FAKE_PENDING=0; unset FAKE_OPTIMIZE_FAIL
 
 check_not "unknown ref rejected" "$BIN/release.sh" --ref does-not-exist
 FAKE_PHP_ID=80300 check_not "PHP < 8.4 rejected" "$BIN/release.sh"

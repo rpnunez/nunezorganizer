@@ -37,13 +37,14 @@ services:
     <<: *php-common
     environment:
       NUNEZ_IN_DOCKER: "1"
-      XDEBUG_MODE: ${XDEBUG_MODE:-debug,develop}
+      XDEBUG_MODE: ${XDEBUG_MODE:-debug}
       XDEBUG_CONFIG: "client_host=host.docker.internal client_port=${NUNEZ_XDEBUG_PORT:-9013}"
 
   queue:
     <<: *php-common
     # queue:listen reloads the code for every job, so edits apply without restarts.
-    command: ["php", "artisan", "queue:listen", "--queue=notifications,default", "--tries=3", "--sleep=2"]
+    # Waits for setup.php on a fresh clone (docker/php/wait-for-setup.sh) instead of crash-looping.
+    command: ["sh", "docker/php/wait-for-setup.sh", "php", "artisan", "queue:listen", "--queue=notifications,default", "--tries=3", "--sleep=2"]
     environment:
       NUNEZ_IN_DOCKER: "1"
       XDEBUG_MODE: ${XDEBUG_MODE_WORKERS:-off}
@@ -51,7 +52,7 @@ services:
 
   scheduler:
     <<: *php-common
-    command: ["php", "artisan", "schedule:work"]
+    command: ["sh", "docker/php/wait-for-setup.sh", "php", "artisan", "schedule:work"]
     environment:
       NUNEZ_IN_DOCKER: "1"
       XDEBUG_MODE: ${XDEBUG_MODE_WORKERS:-off}

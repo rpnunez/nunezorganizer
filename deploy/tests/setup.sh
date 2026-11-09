@@ -131,6 +131,32 @@ check "--allow-http accepted" env NUNEZ_DB_PASSWORD=Str0ngPassw0rd bash -c "cd '
 fresh
 check_not "placeholder DB password refused" env NUNEZ_DB_PASSWORD=secret bash -c "cd '$P' && php setup.php --env=production -n --composer='$STUBS/composer' --app-url=https://nz.example.test --skip-assets --skip-migrate"
 
+echo "== setup.php: .env round trip (what setup writes, its own DB check reads back)"
+cat > "$T/parse.php" <<'EOF'
+<?php
+// Load setup.php's functions without running it.
+$src = file_get_contents($argv[1]);
+$src = preg_replace('/^exit\(nunez_main\(.*$/m', '', $src);
+eval('?>' . $src);
+foreach (array('Str0ng pa$$ "word"', 'a${HOME}b', 'back\\slash #hash', "it's", 'plain') as $pw) {
+    file_put_contents($argv[2], 'DB_PASSWORD=' . nunez_env_quote($pw) . "\n");
+    $got = nunez_read_env($argv[2]);
+    if ($got['DB_PASSWORD'] !== $pw) { fwrite(STDERR, "mismatch: {$pw} -> {$got['DB_PASSWORD']}\n"); exit(1); }
+}
+EOF
+check "nunez_env_quote -> nunez_read_env round-trips special characters" php "$T/parse.php" "$REPO/setup.php" "$T/rt.env"
+
+echo "== setup.php: --validate-env (used by deploy/bin/check-env.sh)"
+fresh
+env NUNEZ_DB_PASSWORD=Str0ngPassw0rd bash -c "cd '$P' && php setup.php --env=production -n --composer='$STUBS/composer' --app-url=https://nz.example.test --skip-assets --skip-migrate" >/dev/null 2>&1
+check "valid production .env passes" bash -c "cd / && php '$P/setup.php' --validate-env='$P/.env'"
+for bad_line in 'APP_DEBUG=true' 'SESSION_HTTP_ONLY=false' 'DB_PASSWORD=CHANGE_ME' 'DB_HOST=mariadb' 'DB_USERNAME=root'; do
+  cp "$P/.env" "$T/bad.env"; echo "$bad_line" >> "$T/bad.env"
+  check_not "--validate-env rejects $bad_line" php "$P/setup.php" --validate-env="$T/bad.env"
+done
+check_not "--validate-env missing file" php "$P/setup.php" --validate-env="$T/nope.env"
+if php "$P/setup.php" --validate-env="$P/.env" 2>&1 | grep -q Str0ngPassw0rd; then bad "--validate-env never prints values"; else ok "--validate-env never prints values"; fi
+
 echo "== setup.php: --check"
 fresh
 check_not "--check fails without .env/vendor/assets" setup --check

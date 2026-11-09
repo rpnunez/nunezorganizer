@@ -98,6 +98,7 @@ Xdebug is installed and on by default, but a debug session **only starts when yo
 The path mapping `/var/www/html` → your project folder is already in `.vscode/launch.json`.
 
 **Turning it down:**
+- The default mode is `debug` only, so untriggered requests and tests pay almost nothing. `XDEBUG_MODE=debug,develop` adds Xdebug's development helpers (nicer `var_dump`, more errors) at some speed cost.
 - `XDEBUG_MODE=off` in `.env`, then `docker compose up -d app`, disables Xdebug completely.
 - `XDEBUG_MODE=coverage` enables code coverage:
   `docker compose exec -e XDEBUG_MODE=coverage app php artisan test --coverage`
@@ -108,7 +109,7 @@ The path mapping `/var/www/html` → your project folder is already in `.vscode/
 - Is VS Code listening? The status bar turns orange.
 - Did the request carry the trigger? Check the browser extension icon.
 - Windows Firewall: allow VS Code on private networks the first time it asks.
-- `docker compose exec app php -r 'var_dump(ini_get("xdebug.mode"));'` should print `debug,develop`.
+- `docker compose exec app php -r 'var_dump(ini_get("xdebug.mode"));'` should print `debug`.
 
 ## Tests and code quality
 

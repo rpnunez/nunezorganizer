@@ -36,6 +36,9 @@ function nunez_main(array $argv)
     }
 
     $ctx = nunez_context($opts);
+    if ($ctx['validate_env'] !== null) {
+        return nunez_validate_env_file($ctx);
+    }
     chdir($ctx['root']);
 
     nunez_title('NunezOrganizer setup · ' . ($ctx['check'] ? 'check' : $ctx['env']) . ($ctx['dry_run'] ? ' (dry run)' : '') . ($ctx['in_docker'] ? ' · Docker' : ''));
@@ -79,6 +82,8 @@ Modes
                             production .env (validated), migrations (with confirmation),
                             asset build, caches, then prints cron/queue/web server steps.
   --check                   Report what's missing or unsafe. Changes nothing.
+  --validate-env=FILE       Only check that FILE is a safe production .env (exit 1 if not);
+                            used by deploy/bin/check-env.sh. Values are never printed.
 
 Options
   -n, --no-interaction      Never prompt; use flags, environment variables and defaults.
@@ -122,7 +127,8 @@ function nunez_parse_args(array $args)
         }
     }
     $known = array('help', 'env', 'check', 'no-interaction', 'force', 'dry-run', 'skip-assets', 'skip-seed',
-        'skip-migrate', 'allow-http', 'composer', 'app-url', 'db-host', 'db-port', 'db-name', 'db-user', 'mail-from');
+        'skip-migrate', 'allow-http', 'composer', 'app-url', 'db-host', 'db-port', 'db-name', 'db-user', 'mail-from',
+        'validate-env');
     foreach (array_keys($opts) as $key) {
         if (! in_array($key, $known, true)) {
             fwrite(STDERR, "Unknown option: --{$key} (see --help)\n");
@@ -157,6 +163,8 @@ function nunez_context(array $opts)
         'windows' => DIRECTORY_SEPARATOR === '\\',
         'php' => PHP_BINARY,
         'composer_opt' => isset($opts['composer']) ? $opts['composer'] : null,
+        'validate_env' => isset($opts['validate-env']) && is_string($opts['validate-env']) ? $opts['validate-env'] : null,
+        'env_explicit' => isset($opts['env']),
         'composer' => null,
         'values' => array(
             'app-url' => isset($opts['app-url']) ? $opts['app-url'] : null,
@@ -577,7 +585,12 @@ function nunez_validate_env(array $ctx, array $env, $mode)
         $errors[] = 'APP_KEY missing or invalid';
     }
     if ($get('DB_HOST') === 'mariadb' && ! $ctx['in_docker']) {
-        $warnings[] = 'DB_HOST=mariadb only resolves inside Docker; natively use 127.0.0.1';
+        $msg = 'DB_HOST=mariadb only resolves inside Docker; natively use 127.0.0.1';
+        if ($mode === 'production') {
+            $errors[] = $msg;
+        } else {
+            $warnings[] = $msg;
+        }
     }
 
     if ($mode === 'production') {
@@ -594,7 +607,13 @@ function nunez_validate_env(array $ctx, array $env, $mode)
         if ($https && $lower('SESSION_SECURE_COOKIE') !== 'true') {
             $errors[] = 'SESSION_SECURE_COOKIE must be true';
         }
-        if ($get('DB_PASSWORD') === '' || in_array($get('DB_PASSWORD'), array('secret', 'password', 'root', 'changeme'), true)) {
+        if (! in_array($lower('SESSION_HTTP_ONLY'), array('true', ''), true)) {
+            $errors[] = 'SESSION_HTTP_ONLY must be true (or unset)';
+        }
+        if ($lower('SESSION_ENCRYPT') !== 'true') {
+            $warnings[] = 'SESSION_ENCRYPT is not true';
+        }
+        if ($get('DB_PASSWORD') === '' || in_array(strtolower($get('DB_PASSWORD')), array('secret', 'password', 'root', 'changeme', 'change_me'), true)) {
             $errors[] = 'DB_PASSWORD is empty or a placeholder';
         }
         if ($get('DB_USERNAME') === 'root') {
@@ -612,8 +631,11 @@ function nunez_validate_env(array $ctx, array $env, $mode)
         if (in_array($lower('MAIL_MAILER'), array('log', 'array', ''), true)) {
             $warnings[] = 'MAIL_MAILER is log/array: verification and password-reset emails will not be sent';
         }
-        if (! $ctx['windows'] && is_file('.env') && (fileperms('.env') & 0077) !== 0) {
+        if (! $ctx['windows'] && $ctx['validate_env'] === null && is_file('.env') && (fileperms('.env') & 0077) !== 0) {
             $warnings[] = '.env is readable by other users: chmod 600 .env';
+        }
+        if ($get('TELEGRAM_BOT_TOKEN') === '') {
+            $warnings[] = 'TELEGRAM_BOT_TOKEN is empty: Telegram check-ins are disabled';
         }
     }
 
@@ -630,6 +652,21 @@ function nunez_validate_env(array $ctx, array $env, $mode)
     return $errors;
 }
 
+/** --validate-env=FILE: rule check only (no preflight, no output of values). */
+function nunez_validate_env_file(array $ctx)
+{
+    $file = $ctx['validate_env'];
+    if (! is_file($file)) {
+        nunez_bad(".env not found: {$file}");
+
+        return 1;
+    }
+    $mode = $ctx['env_explicit'] ? $ctx['env'] : 'production';
+    $errors = nunez_validate_env($ctx, nunez_read_env($file), $mode);
+
+    return $errors ? 1 : 0;
+}
+
 function nunez_read_env($path)
 {
     $out = array();
@@ -640,18 +677,45 @@ function nunez_read_env($path)
         if (! preg_match('/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/', $line, $m)) {
             continue;
         }
-        $v = trim($m[2]);
-        if ($v !== '' && ($v[0] === '"' || $v[0] === "'")) {
-            $q = $v[0];
-            $end = strpos($v, $q, 1);
-            $v = $end === false ? substr($v, 1) : substr($v, 1, $end - 1);
-        } else {
-            $v = preg_replace('/\s+#.*$/', '', $v);
-        }
-        $out[$m[1]] = $v;
+        $out[$m[1]] = nunez_parse_env_value(trim($m[2]));
     }
 
     return $out;
+}
+
+/**
+ * Parses one .env value the way phpdotenv does for the cases setup.php writes:
+ * 'single quotes' are literal; "double quotes" honour \" \\ \$ escapes;
+ * unquoted values end at an inline " #" comment.
+ */
+function nunez_parse_env_value($v)
+{
+    if ($v === '') {
+        return '';
+    }
+    if ($v[0] === "'") {
+        $end = strpos($v, "'", 1);
+
+        return $end === false ? substr($v, 1) : substr($v, 1, $end - 1);
+    }
+    if ($v[0] === '"') {
+        $out = '';
+        $len = strlen($v);
+        for ($i = 1; $i < $len; $i++) {
+            $c = $v[$i];
+            if ($c === '\\' && $i + 1 < $len && strpos('"\\$', $v[$i + 1]) !== false) {
+                $out .= $v[++$i];
+            } elseif ($c === '"') {
+                break;
+            } else {
+                $out .= $c;
+            }
+        }
+
+        return $out;
+    }
+
+    return preg_replace('/\s+#.*$/', '', $v);
 }
 
 function nunez_env_quote($value)
