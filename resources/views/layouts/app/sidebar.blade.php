@@ -21,6 +21,8 @@
                     <flux:sidebar.item icon="list-bullet" :href="route('tasks.index')" :current="request()->routeIs('tasks.*') && ! request()->routeIs('tasks.create')" wire:navigate>
                         {{ __('Tasks') }}
                     </flux:sidebar.item>
+                    <flux:sidebar.item icon="chart-bar" :href="route('progress')" :current="request()->routeIs('progress')" wire:navigate>{{ __('Progress') }}</flux:sidebar.item>
+                    <flux:sidebar.item icon="clock" :href="route('history')" :current="request()->routeIs('history')" wire:navigate>{{ __('History') }}</flux:sidebar.item>
                     <flux:sidebar.item icon="plus-circle" :href="route('tasks.create')" :current="request()->routeIs('tasks.create')" wire:navigate>
                         {{ __('New task') }}
                     </flux:sidebar.item>

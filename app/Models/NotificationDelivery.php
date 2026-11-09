@@ -24,7 +24,7 @@ class NotificationDelivery extends Model
     use BelongsToAccount, HasUlids;
 
     protected $fillable = [
-        'user_id', 'occurrence_id', 'kind', 'channel', 'status', 'due_at',
+        'user_id', 'occurrence_id', 'daily_review_id', 'kind', 'channel', 'status', 'due_at',
         'sent_at', 'external_message_id', 'occurrence_version', 'attempt_count', 'last_error_code',
     ];
 

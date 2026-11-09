@@ -19,6 +19,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::livewire('dashboard', 'pages::today')->name('dashboard');
     Route::livewire('onboarding', 'pages::onboarding')->name('onboarding');
     Route::livewire('backlog', 'pages::backlog')->name('backlog');
+    Route::livewire('history', 'pages::history')->name('history');
+    Route::livewire('progress', 'pages::progress')->name('progress');
     Route::livewire('tasks', 'pages::tasks.index')->name('tasks.index');
     Route::livewire('tasks/create', 'pages::tasks.create')->name('tasks.create');
     Route::livewire('tasks/{task}', 'pages::tasks.show')->name('tasks.show');
