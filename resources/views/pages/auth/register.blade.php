@@ -1,12 +1,15 @@
 <x-layouts::auth :title="__('Register')">
     <div class="flex flex-col gap-6">
-        <x-auth-header :title="__('Create an account')" :description="__('Enter your details below to create your account')" />
+        <x-auth-header :title="__('Create an account')" :description="$invitation ? __('You have been invited to NunezOrganizer.') : __('Enter your details below to create your account')" />
 
         <!-- Session Status -->
         <x-auth-session-status class="text-center" :status="session('status')" />
 
         <form method="POST" action="{{ route('register.store') }}" class="flex flex-col gap-6">
             @csrf
+            @if ($invitationToken)
+                <input type="hidden" name="invitation" value="{{ old('invitation', $invitationToken) }}">
+            @endif
             <!-- Name -->
             <flux:input
                 name="name"
@@ -23,9 +26,10 @@
             <flux:input
                 name="email"
                 :label="__('Email address')"
-                :value="old('email')"
+                :value="old('email', $invitation?->email)"
                 type="email"
                 required
+                :readonly="(bool) $invitation"
                 autocomplete="email"
                 placeholder="email@example.com"
             />
