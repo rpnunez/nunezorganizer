@@ -148,6 +148,7 @@ class TodayAndBacklogPagesTest extends TestCase
             ->assertSee('aria-labelledby="pending-heading"', false)
             ->assertSee('aria-label="Main"', false)
             ->assertSee('aria-current="page"', false)
+            ->assertSee('href="'.route('profile.edit').'"', false)
             ->assertSee('aria-label="Yes, I finished Organize my desk"', false);
     }
 }

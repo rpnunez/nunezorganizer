@@ -96,7 +96,7 @@
                     ['route' => 'dashboard', 'match' => 'dashboard', 'icon' => 'sun', 'label' => __('Today')],
                     ['route' => 'backlog', 'match' => 'backlog', 'icon' => 'inbox-stack', 'label' => __('Backlog')],
                     ['route' => 'tasks.index', 'match' => 'tasks.index', 'icon' => 'list-bullet', 'label' => __('Tasks')],
-                    ['route' => 'tasks.create', 'match' => 'tasks.create', 'icon' => 'plus-circle', 'label' => __('New')],
+                    ['route' => 'profile.edit', 'match' => 'profile.edit', 'icon' => 'cog', 'label' => __('Settings')],
                 ] as $tab)
                     @php($active = request()->routeIs($tab['match']))
                     <li>
