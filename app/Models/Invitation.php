@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 /**
@@ -17,10 +17,10 @@ use Illuminate\Support\Str;
  * @property string $token_hash
  * @property int|null $invited_by
  * @property int|null $accepted_user_id
- * @property Carbon $expires_at
- * @property Carbon|null $accepted_at
- * @property Carbon|null $created_at
- * @property Carbon|null $updated_at
+ * @property CarbonInterface $expires_at
+ * @property CarbonInterface|null $accepted_at
+ * @property CarbonInterface|null $created_at
+ * @property CarbonInterface|null $updated_at
  */
 class Invitation extends Model
 {

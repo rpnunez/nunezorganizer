@@ -30,7 +30,9 @@ Web (Blade + Livewire + Flux)          Telegram private chat
 
 | Path | Responsibility |
 |---|---|
-| `app/Domain/Accounts` | Accounts, memberships, preferences, `TenantContext` |
+| `app/Domain/Accounts` | `TenantContext`, `BelongsToAccount` trait, account/preference actions, tenant-aware job middleware |
+| `app/Domain/Audit` | `Audit::record()` and the secrets `Redactor` |
+| `app/Models` | All Eloquent models (kept in the Laravel default location for factories/discovery) |
 | `app/Domain/Tasks` | Task model, task lifecycle services |
 | `app/Domain/Scheduling` | Occurrences, completion/punctuality, backlog & today queries |
 | `app/Domain/Notifications` | Delivery outbox, `NotificationChannel` contract, dispatch jobs |
