@@ -60,6 +60,7 @@ class UpdateUserPreferences
             'timezone' => ['sometimes', 'required', 'string', new ValidIanaTimezone],
             'grace_minutes' => ['sometimes', 'required', 'integer', 'min:0', 'max:240'],
             'unanswered_after_minutes' => ['sometimes', 'required', 'integer', 'min:15', 'max:10080'],
+            'preferred_activity_start' => ['sometimes', 'nullable', self::TIME],
 
             'quiet_hours' => ['sometimes', 'nullable', 'array:start,end'],
             'quiet_hours.start' => ['required_with:quiet_hours', self::TIME],

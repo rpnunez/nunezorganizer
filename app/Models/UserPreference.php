@@ -18,6 +18,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $timezone
  * @property int $grace_minutes
  * @property int $unanswered_after_minutes
+ * @property string|null $preferred_activity_start
+ * @property CarbonInterface|null $onboarding_completed_at
  * @property array<string, list<array{start: string, end: string}>>|null $work_windows
  * @property array{start: string, end: string}|null $quiet_hours
  * @property array<string, string|null>|null $review_times
@@ -42,6 +44,7 @@ class UserPreference extends Model
         'timezone',
         'grace_minutes',
         'unanswered_after_minutes',
+        'preferred_activity_start',
         'work_windows',
         'quiet_hours',
         'review_times',
@@ -56,6 +59,7 @@ class UserPreference extends Model
         return [
             'grace_minutes' => 'integer',
             'unanswered_after_minutes' => 'integer',
+            'onboarding_completed_at' => 'datetime',
             'work_windows' => 'array',
             'quiet_hours' => 'array',
             'review_times' => 'array',

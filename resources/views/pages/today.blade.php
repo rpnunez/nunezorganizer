@@ -5,6 +5,7 @@ use App\Domain\Scheduling\Queries\BacklogQuery;
 use App\Domain\Scheduling\Queries\LocalDay;
 use App\Domain\Scheduling\Queries\TodayQuery;
 use App\Enums\OccurrenceState;
+use App\Models\UserPreference;
 use App\Support\LocalClock;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
@@ -39,6 +40,13 @@ new #[Title('Today')] class extends TaskActionsPage {
     {
         return app(BacklogQuery::class)->count($this->currentUser(), $this->day);
     }
+
+    #[Computed]
+    public function needsOnboarding(): bool
+    {
+        return UserPreference::query()->where('user_id', $this->currentUser()->id)
+            ->whereNull('onboarding_completed_at')->exists();
+    }
 }; ?>
 
 <div class="mx-auto flex w-full max-w-2xl flex-col gap-8">
@@ -49,6 +57,14 @@ new #[Title('Today')] class extends TaskActionsPage {
         </div>
         <flux:button :href="route('tasks.create')" icon="plus" variant="primary" size="sm" wire:navigate>{{ __('New task') }}</flux:button>
     </header>
+
+    @if ($this->needsOnboarding)
+        <section class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700" aria-label="{{ __('Set up your routine') }}">
+            <flux:heading level="2">{{ __('Make this routine yours') }}</flux:heading>
+            <flux:text class="mt-1">{{ __('Choose your timezone and check-in times, then create a first task.') }}</flux:text>
+            <flux:button :href="route('onboarding')" wire:navigate class="mt-3 min-h-11">{{ __('Set up your routine') }}</flux:button>
+        </section>
+    @endif
 
     {{-- 1. Blocks waiting for an honest answer --}}
     @if ($this->pending->isNotEmpty())
