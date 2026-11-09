@@ -2,7 +2,7 @@
 
 A standalone, mobile-first, multi-user accountability app. You schedule small, time-bound commitments. When each block ends, a private Telegram check-in asks **Yes / No**. The answer is recorded honestly, and unfinished work stays visible in your backlog until it's done.
 
-> Status: early development (milestone **M0 · Repo & CI Foundation**). See the pinned [roadmap issue](https://github.com/rpnunez/nunezorganizer/issues/27).
+> Status: MVP implementation is in the production-pilot milestone. See the pinned [roadmap issue](https://github.com/rpnunez/nunezorganizer/issues/27).
 
 ## Stack
 
@@ -18,7 +18,20 @@ All timestamps are stored in **UTC**. Each user's IANA timezone drives local-tim
 
 ## Getting started
 
-**Docker (recommended for development):** PHP 8.4 + Xdebug, nginx, MariaDB, Vite with live reload, a queue worker, the scheduler, Mailpit and phpMyAdmin. Nothing else is needed on your machine.
+**Windows with XAMPP MariaDB:** run PHP 8.4 separately for the Laravel CLI, then use the native setup script. The project uses XAMPP's MariaDB server; it does not need Docker.
+
+```powershell
+$php84Dir = 'C:\path\to\php-8.4'
+$env:Path = "$php84Dir;$env:Path"
+$env:PHP = Join-Path $php84Dir 'php.exe'
+& $env:PHP setup.php --check
+& $env:PHP setup.php --db-host=127.0.0.1
+& $env:PHP artisan serve --host=127.0.0.1
+```
+
+Create the application and test databases in XAMPP MariaDB before setup. See [native installation](docs/install.md#development-native) for the SQL and [Windows XAMPP notes](docs/install.md#windows-xampp-mariadb) for checks.
+
+**Optional container development:** PHP 8.4 + Xdebug, nginx, MariaDB, Vite with live reload, a queue worker, the scheduler, Mailpit and phpMyAdmin.
 
 ```bash
 cp .env.example .env                  # host ports: NUNEZ_*_PORT (defaults 8480, 8481, 8482, 5480, 33480)
@@ -26,7 +39,7 @@ docker compose up -d --build
 docker compose exec app php setup.php
 ```
 
-Then open http://localhost:8480 and log in as `alice@example.test` / `password`. Mailpit runs on :8482 and phpMyAdmin on :8481. Xdebug + VS Code, tests and troubleshooting: **[docs/development.md](docs/development.md)**.
+With the optional container setup, open http://localhost:8480 and log in as `alice@example.test` / `password`. Its Xdebug and troubleshooting guide is [docs/development.md](docs/development.md).
 
 **Any other machine or server:** `php setup.php` (development) or `php setup.php --env=production` (an in-place server install) works anywhere PHP 8.4 runs. Run `php setup.php --check` to see what's missing. Production with zero-downtime releases, backups and rollback uses the `deploy/` tooling. Everything is in **[docs/install.md](docs/install.md)**. [docs/runbook.md](docs/runbook.md) is a worked example on a Webuzo + OpenLiteSpeed host.
 
@@ -76,7 +89,7 @@ php artisan test
 
 ## Documentation
 
-- [Install](docs/install.md) · [Development with Docker](docs/development.md) · [Reference deployment (Webuzo + OLS)](docs/runbook.md)
+- [Install, including XAMPP](docs/install.md) · [Optional container development](docs/development.md) · [Reference deployment (Webuzo + OLS)](docs/runbook.md)
 - [Architecture](docs/architecture.md) · [Domain model](docs/domain-model.md) · [ADRs](docs/adr/)
 - [AGENTS.md](AGENTS.md): rules for coding agents and contributors
 - [SECURITY.md](SECURITY.md): private vulnerability reporting

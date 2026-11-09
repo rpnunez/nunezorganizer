@@ -4,8 +4,9 @@ This guide covers every supported way to run NunezOrganizer, on any host:
 
 | You want to… | Use | Section |
 |---|---|---|
-| Develop or test locally | Docker (nginx, PHP-FPM + Xdebug, MariaDB, Vite, Mailpit, phpMyAdmin) | [Development (Docker)](#development-docker) · full guide: [development.md](development.md) |
-| Develop without Docker | Native PHP 8.4 + MariaDB + Node | [Development (native)](#development-native) |
+| Develop or test on Windows with XAMPP | XAMPP MariaDB + separate PHP 8.4 CLI + Node | [Windows XAMPP MariaDB](#windows-xampp-mariadb) |
+| Develop natively elsewhere | PHP 8.4 + MariaDB + Node | [Development (native)](#development-native) |
+| Use optional containers | Docker (nginx, PHP-FPM + Xdebug, MariaDB, Vite, Mailpit, phpMyAdmin) | [Development (Docker)](#development-docker) · full guide: [development.md](development.md) |
 | Run it on a server, simply | `setup.php --env=production` in one directory | [Production A: in place](#production-a-in-place) |
 | Run it on a server with zero-downtime releases, backups and rollback | `deploy/` scripts | [Production B: releases](#production-b-zero-downtime-releases) |
 
@@ -91,6 +92,26 @@ php artisan serve      # http://127.0.0.1:8000  (or: composer dev, for server + 
 ```
 
 The tests always use the `nunezorganizer_test` database, which `phpunit.xml` forces.
+
+## Windows XAMPP MariaDB
+
+XAMPP can supply **MariaDB** while a separate PHP 8.4 CLI runs Laravel. XAMPP's bundled PHP does not need to be replaced. Start MySQL in the XAMPP Control Panel, then create the two databases and local app user using the SQL in [Development (native)](#development-native). Keep `DB_HOST=127.0.0.1` and use the XAMPP MariaDB port (normally `3306`).
+
+In PowerShell, put the PHP 8.4 directory first on `Path` so Composer and Artisan use the same PHP version. The PHP 8.4 installation needs `pdo_mysql` and the other extensions in [Requirements](#requirements).
+
+```powershell
+$php84Dir = 'C:\path\to\php-8.4'
+$env:Path = "$php84Dir;$env:Path"
+$env:PHP = Join-Path $php84Dir 'php.exe'
+& $env:PHP -v
+& $env:PHP setup.php --check
+& $env:PHP setup.php --db-host=127.0.0.1
+& $env:PHP artisan test --compact
+& $env:PHP vendor/bin/pint --test
+& $env:PHP -d memory_limit=1G vendor/bin/phpstan analyse --no-progress --memory-limit=1G
+```
+
+The local test suite uses the separate `nunezorganizer_test` schema. The Linux deployment-script suite (`bash deploy/tests/run.sh`) requires Linux file permissions and tools such as `flock`; Git Bash on Windows does not model those, so run that suite on a Linux host or CI. No Docker service is required for the native workflow.
 
 ## Production A: in place
 

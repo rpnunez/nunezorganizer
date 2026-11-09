@@ -9,7 +9,7 @@ You are working on **NunezOrganizer** (`rpnunez/nunezorganizer`), a standalone, 
 
 ## Stack & commands
 - PHP **^8.4**, Laravel **13**, Livewire 4 + Flux, Fortify, MariaDB **10.11**. Tests run on MariaDB, never SQLite.
-- Docker: `docker compose up -d`, first run `docker compose exec app php setup.php`, then prefix commands with `docker compose exec app` (see `docs/development.md`). Any other environment: `php setup.php` (`docs/install.md`).
+- Native Windows development uses XAMPP MariaDB plus a separate PHP 8.4 CLI (`docs/install.md#windows-xampp-mariadb`). Set that PHP directory first on `Path`, then run `php setup.php`. The optional Docker workflow is in `docs/development.md`; do not substitute it when the owner requests XAMPP.
 
 | Purpose | Command |
 |---|---|
