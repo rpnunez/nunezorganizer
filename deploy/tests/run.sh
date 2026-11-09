@@ -7,6 +7,7 @@
 # Needs: bash, git, shellcheck (optional, skipped if missing), age (optional).
 
 set -uo pipefail
+ORIG_PATH="$PATH"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY="$(dirname "$HERE")"
 BIN="$DEPLOY/bin"
@@ -295,6 +296,16 @@ echo "== audit script"
 check "audit runs and writes a report" bash -c 'cd "$1" && shift && bash "$@"' _ "$T" "$DEPLOY/audit/vps-audit.sh" --out "$T/audit.txt" --domain localhost
 check "report is 600" test "$(stat -c %a "$T/audit.txt")" = 600
 check "report has sections" grep -q '==================== PHP ====================' "$T/audit.txt"
+
+echo
+echo "== setup.php (deploy/tests/setup.sh)"
+# Clean environment: this suite's stubs (fake php, curl, ...) must not leak in.
+if env -i HOME="$HOME" PATH="$ORIG_PATH" bash "$HERE/setup.sh" > "$T/setup-tests.log" 2>&1; then
+  ok "setup.php suite ($(tail -n1 "$T/setup-tests.log" | sed 's/^setup.php — //'))"
+else
+  grep -E 'FAIL|passed' "$T/setup-tests.log" | sed 's/^/    /'
+  bad "setup.php suite"
+fi
 
 echo
 echo "passed: $pass  failed: $fail"

@@ -1,0 +1,137 @@
+# NunezOrganizer: Docker development & test environment.
+#
+#   docker compose up -d --build              # first run (then just: docker compose up -d)
+#   docker compose exec app php setup.php     # install deps, .env, key, migrate, seed
+#
+#   http://localhost:8480   app (nginx -> php-fpm)
+#   http://localhost:8481   phpMyAdmin
+#   http://localhost:8482   Mailpit (all outgoing mail)
+#   http://localhost:5480   Vite dev server (live reload, used by the app pages)
+#   localhost:33480         MariaDB (host tools: user/password from .env)
+#   VS Code listens on 9013 for Xdebug
+#
+# Every host port is set in .env (NUNEZ_*_PORT); Compose reads the project's .env
+# automatically. All ports bind to 127.0.0.1 only. Full guide: docs/development.md
+name: nunezorganizer
+
+x-php-build: &php-build
+  context: docker/php
+  args:
+    UID: ${UID:-1000}
+    GID: ${GID:-1000}
+
+x-php-common: &php-common
+  image: nunezorganizer-php-fpm:8.4
+  build: *php-build
+  volumes:
+    - .:/var/www/html
+  extra_hosts:
+    - "host.docker.internal:host-gateway"   # Linux; Docker Desktop already provides it
+  depends_on:
+    mariadb:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  app:
+    <<: *php-common
+    environment:
+      NUNEZ_IN_DOCKER: "1"
+      XDEBUG_MODE: ${XDEBUG_MODE:-debug,develop}
+      XDEBUG_CONFIG: "client_host=host.docker.internal client_port=${NUNEZ_XDEBUG_PORT:-9013}"
+
+  queue:
+    <<: *php-common
+    # queue:listen reloads the code for every job, so edits apply without restarts.
+    command: ["php", "artisan", "queue:listen", "--queue=notifications,default", "--tries=3", "--sleep=2"]
+    environment:
+      NUNEZ_IN_DOCKER: "1"
+      XDEBUG_MODE: ${XDEBUG_MODE_WORKERS:-off}
+      XDEBUG_CONFIG: "client_host=host.docker.internal client_port=${NUNEZ_XDEBUG_PORT:-9013}"
+
+  scheduler:
+    <<: *php-common
+    command: ["php", "artisan", "schedule:work"]
+    environment:
+      NUNEZ_IN_DOCKER: "1"
+      XDEBUG_MODE: ${XDEBUG_MODE_WORKERS:-off}
+      XDEBUG_CONFIG: "client_host=host.docker.internal client_port=${NUNEZ_XDEBUG_PORT:-9013}"
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "127.0.0.1:${NUNEZ_HTTP_PORT:-8480}:80"
+    volumes:
+      - .:/var/www/html:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app
+    restart: unless-stopped
+
+  node:
+    image: node:22-bookworm
+    working_dir: /var/www/html
+    # Install dependencies when node_modules is missing or older than the lockfile,
+    # then run the Vite dev server (writes public/hot so pages load assets from it).
+    command:
+      - sh
+      - -c
+      - |
+        if [ ! -f node_modules/.package-lock.json ] || [ package-lock.json -nt node_modules/.package-lock.json ]; then
+          npm ci --no-audit --no-fund
+        fi
+        exec npm run dev
+    environment:
+      VITE_DOCKER: "1"
+      VITE_PORT: ${NUNEZ_VITE_PORT:-5480}
+    ports:
+      - "127.0.0.1:${NUNEZ_VITE_PORT:-5480}:${NUNEZ_VITE_PORT:-5480}"
+    volumes:
+      - .:/var/www/html
+      # Linux node_modules live in a volume, so they never clash with a Windows host install.
+      - node-modules:/var/www/html/node_modules
+    restart: unless-stopped
+
+  mariadb:
+    image: mariadb:${MARIADB_VERSION:-10.11}
+    environment:
+      MARIADB_ROOT_PASSWORD: ${NUNEZ_DB_ROOT_PASSWORD:-root}
+      MARIADB_DATABASE: ${DB_DATABASE:-nunezorganizer}
+      MARIADB_USER: ${DB_USERNAME:-nunezorganizer}
+      MARIADB_PASSWORD: ${DB_PASSWORD:-secret}
+    ports:
+      - "127.0.0.1:${NUNEZ_DB_PORT:-33480}:3306"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+      - ./docker/mariadb/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "127.0.0.1:${NUNEZ_MAILPIT_PORT:-8482}:8025"
+    restart: unless-stopped
+
+  phpmyadmin:
+    image: phpmyadmin:5
+    environment:
+      PMA_HOST: mariadb
+      # Logs straight in as the app's DB user (local-only port, dev credentials).
+      PMA_USER: ${DB_USERNAME:-nunezorganizer}
+      PMA_PASSWORD: ${DB_PASSWORD:-secret}
+      UPLOAD_LIMIT: 64M
+    ports:
+      - "127.0.0.1:${NUNEZ_PMA_PORT:-8481}:80"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  mariadb-data:
+  node-modules:

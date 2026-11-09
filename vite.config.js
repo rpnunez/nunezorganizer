@@ -3,6 +3,19 @@ import laravel from 'laravel-vite-plugin';
 import { bunny } from 'laravel-vite-plugin/fonts';
 import { defineConfig, lazyPlugins } from 'vite-plus';
 
+// Inside the Docker `node` service (VITE_DOCKER=1): listen on all interfaces and tell
+// the browser (and public/hot) to use localhost:<VITE_PORT>. No effect elsewhere.
+const vitePort = Number(process.env.VITE_PORT || 5173);
+const dockerServer = process.env.VITE_DOCKER
+    ? {
+          host: '0.0.0.0',
+          port: vitePort,
+          strictPort: true,
+          origin: `http://localhost:${vitePort}`,
+          hmr: { host: 'localhost', clientPort: vitePort },
+      }
+    : {};
+
 export default defineConfig({
     plugins: lazyPlugins(() => [
         laravel({
@@ -24,7 +37,10 @@ export default defineConfig({
     ]),
     server: {
         cors: true,
+        ...dockerServer,
         watch: {
+            // Bind mounts from Windows/macOS hosts don't deliver file events into containers.
+            usePolling: Boolean(process.env.VITE_DOCKER),
             ignored: [
                 '**/.agents/**',
                 '**/.claude/**',

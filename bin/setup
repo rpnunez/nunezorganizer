@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# Wrapper for setup.php (Linux/macOS/WSL). Uses $PHP if set, e.g. PHP=/usr/local/bin/php8.4 bin/setup
+# Docker: docker compose exec app php setup.php
+exec "${PHP:-php}" "$(dirname "$0")/../setup.php" "$@"
