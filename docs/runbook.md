@@ -21,7 +21,6 @@ Running NunezOrganizer at **https://organizer.nunezserver.online** on the Webuzo
 - [Changing .env](#changing-env)
 - [Telegram webhook](#telegram-webhook)
 - [Production .env checklist](#production-env-checklist)
-- [Server security findings](#server-security-findings)
 - [Open decisions](#open-decisions)
 
 ## Isolation model
@@ -339,16 +338,6 @@ This becomes relevant once M4 ships (#15/#16). After each change of domain, `TEL
 - [ ] mail works: `MAIL_MAILER=sendmail` through local Exim, with DKIM/SPF set for the From domain (password reset and email verification depend on it)
 - [ ] Trusted proxies: not needed while OLS terminates TLS directly. If Cloudflare or another proxy is put in front, configure `trustProxies` in `bootstrap/app.php` for the proxy ranges only, never `*`.
 - [ ] HTTPS-only redirect and HSTS are active (see [Web server](#web-server))
-
-## Server security findings
-
-The audit turned these up. They're outside this app, but they affect every site on the box. They're listed for the owner and not changed by any script here.
-
-| Finding | Risk | Suggested fix |
-|---|---|---|
-| MariaDB listens on `0.0.0.0:3306` and `[::]:3306`, and firewalld isn't running | The database is reachable from the internet. Users with host `%` (`nsosu_la`, `nsosu_dst_dev_user`, anonymous `''@'%'` on `test`) can be brute-forced | Set `bind-address=127.0.0.1` if nothing remote needs the DB, or firewall 3306. Drop the anonymous users and the `test` DB |
-| `PermitRootLogin yes` and `PasswordAuthentication yes` in sshd | Root password brute force (fail2ban only has an `exim-auth` jail) | Key-only root login (`PermitRootLogin prohibit-password`, `PasswordAuthentication no`) once your key works, plus an sshd fail2ban jail |
-| No swap, 6 GB RAM, `innodb_buffer_pool_size=4G` | The kernel may kill processes when memory runs out under load | Add a 2 GB swap file, or lower the buffer pool |
 
 ## Open decisions
 
