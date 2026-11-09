@@ -5,6 +5,10 @@ use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\OccurrenceController;
 use App\Http\Controllers\Api\V1\TaskController;
 use App\Http\Middleware\EnforceIdempotency;
+use App\Integrations\Telegram\CreatePairingCode;
+use App\Integrations\Telegram\UnlinkTelegram;
+use App\Models\User;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -25,6 +29,24 @@ Route::prefix('v1')
         });
 
         Route::middleware('abilities:tasks:write')->group(function () {
+            Route::post('telegram/pairing', function (Request $request, CreatePairingCode $create) {
+                $user = $request->user();
+                abort_unless($user instanceof User, 401);
+                $code = $create->handle($user);
+                $username = (string) config('services.telegram.username');
+
+                return response()->json(['code' => $code, 'expires_in_seconds' => 600,
+                    'deep_link' => $username === '' ? null : 'https://t.me/'.$username.'?start='.$code]);
+            })->name('telegram.pairing');
+
+            Route::delete('telegram/link', function (Request $request, UnlinkTelegram $unlink) {
+                $user = $request->user();
+                abort_unless($user instanceof User, 401);
+                $unlink->handle($user);
+
+                return response()->noContent();
+            })->name('telegram.unlink');
+
             Route::post('tasks', [TaskController::class, 'store'])->name('tasks.store');
             Route::patch('tasks/{task}', [TaskController::class, 'update'])->name('tasks.update');
             Route::post('tasks/{task}/cancel', [TaskController::class, 'cancel'])->name('tasks.cancel');

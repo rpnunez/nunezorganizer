@@ -1,12 +1,19 @@
 <?php
 
 use App\Http\Controllers\HealthController;
+use App\Http\Controllers\TelegramWebhookController;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'welcome')->name('home');
 
 Route::get('healthz', [HealthController::class, 'live'])->name('health.live');
 Route::get('readyz', [HealthController::class, 'ready'])->name('health.ready');
+
+Route::post('webhooks/telegram/{route_key}', TelegramWebhookController::class)
+    ->withoutMiddleware(ValidateCsrfToken::class)
+    ->middleware('throttle:telegram-webhook')
+    ->name('telegram.webhook');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::livewire('dashboard', 'pages::today')->name('dashboard');

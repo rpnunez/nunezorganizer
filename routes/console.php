@@ -15,3 +15,13 @@ Schedule::command('nunez:mark-unanswered')
     ->everyFiveMinutes()
     ->withoutOverlapping()
     ->onOneServer();
+
+Schedule::command('nunez:dispatch-due')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->onOneServer();
+
+Schedule::command('nunez:recover-deliveries')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->onOneServer();
