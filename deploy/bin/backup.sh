@@ -46,6 +46,11 @@ case "${BACKUP_ENCRYPTION:-age}" in
   gpg)
     require_cmd gpg
     [[ -n "${BACKUP_GPG_RECIPIENT:-}" ]] || die "BACKUP_GPG_RECIPIENT not set"
+    if [[ -n "${BACKUP_GPG_HOME:-}" ]]; then export GNUPGHOME="$BACKUP_GPG_HOME"; fi
+    gpg --batch --list-keys "$BACKUP_GPG_RECIPIENT" >/dev/null 2>&1 || die "public key $BACKUP_GPG_RECIPIENT not in keyring ${GNUPGHOME:-~/.gnupg} (see docs/runbook.md#backups)"
+    if gpg --batch --list-secret-keys "$BACKUP_GPG_RECIPIENT" >/dev/null 2>&1; then
+      die "the PRIVATE key for $BACKUP_GPG_RECIPIENT is on this server; keep only the public key here"
+    fi
     EXT="gpg"
     encrypt() { gpg --batch --yes --trust-model always --encrypt --recipient "$BACKUP_GPG_RECIPIENT"; }
     ;;

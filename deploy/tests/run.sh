@@ -55,6 +55,10 @@ cat > "$STUBS/npm" <<'EOF'
 echo "npm $*" >> "$CALLS"
 case "$1" in ci) mkdir -p node_modules ;; run) mkdir -p public/build; echo '{}' > public/build/manifest.json ;; esac
 EOF
+cat > "$STUBS/node" <<'EOF'
+#!/usr/bin/env bash
+echo "${FAKE_NODE:-22.18.1}"
+EOF
 cat > "$STUBS/curl" <<'EOF'
 #!/usr/bin/env bash
 printf '%s' "$FAKE_HEALTH"
@@ -102,6 +106,8 @@ sed -e "s#^APP_ROOT=.*#APP_ROOT=\"$APP_ROOT\"#" \
     -e "s#^BACKUP_AGE_RECIPIENTS_FILE=.*#BACKUP_AGE_RECIPIENTS_FILE=\"$T/etc/recipients.txt\"#" \
     -e "s#^BACKUP_DB_DEFAULTS_FILE=.*#BACKUP_DB_DEFAULTS_FILE=\"$T/etc/backup.my.cnf\"#" \
     -e "s#^KEEP_RELEASES=.*#KEEP_RELEASES=3#" \
+    -e "s#^BACKUP_ENCRYPTION=.*#BACKUP_ENCRYPTION=age#" \
+    -e "s#^BACKUP_GPG_HOME=.*#BACKUP_GPG_HOME=\"$T/server-gnupg\"#" \
     -e "s#^APP_USER=.*#APP_USER=\"$(id -un)\"#" \
     -e "s#^APP_GROUP=.*#APP_GROUP=\"$(id -gn)\"#" \
     "$DEPLOY/deploy.env.example" > "$CFG"
@@ -196,6 +202,7 @@ FAKE_HEALTH=200
 
 check_not "unknown ref rejected" "$BIN/release.sh" --ref does-not-exist
 FAKE_PHP_ID=80300 check_not "PHP < 8.4 rejected" "$BIN/release.sh"
+FAKE_NODE=20.11.0 check_not "Node < 22.18 rejected" "$BIN/release.sh"
 
 exec 9>"$APP_ROOT/.deploy.lock"; flock -n 9
 check_not "concurrent release blocked by lock" "$BIN/release.sh"
@@ -245,6 +252,28 @@ if command -v age >/dev/null && command -v age-keygen >/dev/null; then
   check "retention deletes old sets" test ! -e "$SET.sql.gz.age"
 else
   echo "  skip age not installed"
+fi
+
+echo "== backup / restore (gpg)"
+if command -v gpg >/dev/null; then
+  ( umask 077; mkdir -p "$T/owner-gnupg" "$T/server-gnupg" )
+  GNUPGHOME="$T/owner-gnupg" gpg --batch --quiet --passphrase '' --quick-gen-key 'Nunez Backup Test <backup@test.invalid>' default default never 2>/dev/null
+  FPR="$(GNUPGHOME="$T/owner-gnupg" gpg --batch --with-colons --list-keys | awk -F: '/^fpr/ {print $10; exit}')"
+  GNUPGHOME="$T/owner-gnupg" gpg --batch --export "$FPR" | GNUPGHOME="$T/server-gnupg" gpg --batch --quiet --import 2>/dev/null
+  sed -i -e "s#^BACKUP_ENCRYPTION=.*#BACKUP_ENCRYPTION=gpg#" -e "s#^BACKUP_GPG_RECIPIENT=.*#BACKUP_GPG_RECIPIENT=\"$FPR\"#" "$CFG"
+  printf '[client]\nuser=bk\npassword=x\n' > "$T/etc/backup.my.cnf"; chmod 600 "$T/etc/backup.my.cnf"
+  check "gpg backup (public key only)" "$BIN/backup.sh" --label gpgtest
+  GSET="$(find "$T/backups" -name '*gpgtest.sha256' | head -n1)"; GSET="${GSET%.sha256}"
+  check "gpg backup file exists" test -s "$GSET.sql.gz.gpg"
+  check_not "no plaintext SQL in gpg backup" grep -qa 'CREATE TABLE' "$GSET.sql.gz.gpg"
+  GNUPGHOME="$T/owner-gnupg" FAKE_RESTORE_SINK="$T/restored-gpg.sql" check "gpg restore with owner key" "$BIN/restore.sh" --set "$GSET" --identity gpg
+  check "gpg restore content" grep -q 'INSERT INTO users' "$T/restored-gpg.sql"
+  GNUPGHOME="$T/owner-gnupg" gpg --batch --export-secret-keys "$FPR" | GNUPGHOME="$T/server-gnupg" gpg --batch --quiet --import 2>/dev/null
+  check_not "gpg private key on server refused" "$BIN/backup.sh"
+  sed -i "s#^BACKUP_GPG_RECIPIENT=.*#BACKUP_GPG_RECIPIENT=\"DEADBEEF\"#" "$CFG"
+  check_not "missing gpg public key refused" "$BIN/backup.sh"
+else
+  echo "  skip gpg not installed"
 fi
 
 echo "== healthcheck"

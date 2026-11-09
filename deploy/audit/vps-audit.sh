@@ -156,8 +156,8 @@ fi
 
 # Per-vhost config: docroot, domains, php handler, rewrite, ssl paths (never key contents).
 mapfile -t VHCONFS < <(
-  { find /usr/local/lsws/conf/vhosts -maxdepth 3 -name '*.conf' 2>/dev/null
-    grep -hoE '^\s*configFile\s+\S+' "$OLS_CONF" 2>/dev/null | awk '{print $2}' | sed 's#\$SERVER_ROOT#/usr/local/lsws#'
+  { find /usr/local/lsws/conf/vhosts /usr/local/lsws/conf/webuzo_vh -maxdepth 3 -name '*.conf' 2>/dev/null
+    grep -hoE '^\s*configFile\s+\S+' "$OLS_CONF" 2>/dev/null | awk '{print $2}' | sed 's#\$SERVER_ROOT#/usr/local/lsws#' | grep -v '\$VH_NAME'
   } | sort -u)
 for vc in "${VHCONFS[@]}"; do
   [[ -r "$vc" ]] || continue

@@ -24,6 +24,7 @@ KillSignal=SIGTERM
 TimeoutStopSec=90
 
 # Hardening: read-only system and code, writable shared storage only.
+# Only directives supported by systemd 239 (AlmaLinux 8).
 NoNewPrivileges=yes
 PrivateTmp=yes
 PrivateDevices=yes
@@ -33,7 +34,6 @@ ReadWritePaths={{APP_ROOT}}/shared
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectControlGroups=yes
-RestrictSUIDSGID=yes
 RestrictRealtime=yes
 LockPersonality=yes
 UMask=0027

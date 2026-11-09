@@ -42,14 +42,11 @@ FILESYSTEM_DISK=local
 QUEUE_CONNECTION={{QUEUE_CONNECTION}}
 CACHE_STORE=database
 
-# Outbound SMTP for verification and password-reset emails. TBD (owner).
-MAIL_MAILER=smtp
-MAIL_SCHEME=null
-MAIL_HOST=
-MAIL_PORT=587
-MAIL_USERNAME=
-MAIL_PASSWORD=
-MAIL_FROM_ADDRESS="no-reply@{{APP_DOMAIN}}"
+# Verification and password-reset emails go through the server's local Exim.
+# Deliverability depends on SPF/DKIM for the From domain (Webuzo -> Email -> DKIM).
+MAIL_MAILER=sendmail
+MAIL_SENDMAIL_PATH="/usr/sbin/sendmail -bs -i"
+MAIL_FROM_ADDRESS="{{MAIL_FROM_ADDRESS}}"
 MAIL_FROM_NAME="${APP_NAME}"
 
 NUNEZ_REGISTRATION_MODE=invite

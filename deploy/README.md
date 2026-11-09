@@ -16,7 +16,7 @@ deploy/
 │   ├── install-system-files.sh # root: systemd/supervisor, cron, logrotate, sudoers (dry run by default)
 │   ├── release.sh              # app user: cut + activate a release (migration gate, auto-rollback)
 │   ├── rollback.sh             # app user: switch current to an earlier release
-│   ├── backup.sh               # app user: encrypted DB + files backup with retention
+│   ├── backup.sh               # app user: gpg/age-encrypted DB + files backup with retention
 │   ├── restore.sh              # verify / restore a backup into a drill DB
 │   ├── healthcheck.sh          # cron health check (HTTP, queue, disk, backup age)
 │   └── lib.sh                  # shared helpers
@@ -40,7 +40,7 @@ bash deploy/tests/run.sh
 The tests need no server, PHP app or database. They lint every script with shellcheck and render every template (the unit is checked with `systemd-analyze verify`, the sudoers file with `visudo -c`). Then they exercise these, using stubbed tools:
 - full release flow: migration gate, maintenance mode, health-check auto-rollback, the lock, pruning
 - rollback
-- age-encrypted backup and restore, including tamper detection and retention
+- gpg- and age-encrypted backup and restore, including tamper detection, refusal of private keys, and retention
 - `.env` validation
 - health-check alert suppression
 - the audit script

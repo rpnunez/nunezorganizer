@@ -56,6 +56,11 @@ for ext in bcmath ctype curl dom fileinfo intl mbstring openssl pcntl pdo_mysql 
 done
 [[ -z "$missing" ]] || die "PHP extensions missing from $PHP_BIN: $missing"
 [[ -d "$SHARED_DIR/storage" ]] || die "$SHARED_DIR/storage missing; run bootstrap-layout.sh first"
+command -v "${NPM_BIN:-npm}" >/dev/null 2>&1 || die "npm not found: install Node.js ${NODE_MIN_VERSION:-22} (docs/runbook.md#prerequisites)"
+node_v="$(node -p 'process.versions.node' 2>/dev/null || echo 0.0.0)"
+if [[ "$(printf '%s\n%s\n' "${NODE_MIN_VERSION:-22.18.0}" "$node_v" | sort -V | head -n1)" != "${NODE_MIN_VERSION:-22.18.0}" ]]; then
+  die "Node.js $node_v is too old; the asset build needs >= ${NODE_MIN_VERSION:-22.18.0}"
+fi
 
 # ---------------------------------------------------------------- fetch & export
 if [[ -d "$REPO_MIRROR" ]]; then
