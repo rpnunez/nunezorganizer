@@ -54,6 +54,24 @@ composer types:check    # PHPStan / Larastan
 
 With Docker, prefix each one with `docker compose run --rm app`.
 
+### Run CI locally
+
+These are the same steps as `.github/workflows/ci.yml` (prefix each with `docker compose run --rm app` when using Docker):
+
+```bash
+composer install && npm ci && npm run build
+php artisan migrate --force && php artisan migrate:rollback --force && php artisan migrate --force
+vendor/bin/pint --test
+vendor/bin/phpstan analyse
+php artisan test
+```
+
+## Documentation
+
+- [Architecture](docs/architecture.md) · [Domain model](docs/domain-model.md) · [ADRs](docs/adr/)
+- [AGENTS.md](AGENTS.md): rules for coding agents and contributors
+- [SECURITY.md](SECURITY.md): private vulnerability reporting
+
 ## Health endpoints
 
 - `GET /healthz` returns `{"status":"ok"}` (liveness, no dependencies checked)
