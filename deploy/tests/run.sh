@@ -46,7 +46,9 @@ exit 0
 EOF
 cat > "$STUBS/composer" <<'EOF'
 #!/usr/bin/env bash
-echo "composer $*" >> "$CALLS"; mkdir -p vendor; echo '<?php' > vendor/autoload.php
+echo "composer $*" >> "$CALLS"
+[[ "$1" == install ]] && { mkdir -p vendor; echo '<?php' > vendor/autoload.php; }
+exit 0
 EOF
 cat > "$STUBS/npm" <<'EOF'
 #!/usr/bin/env bash
@@ -259,7 +261,7 @@ check "no global grants" bash -c "! grep -q 'ON \*\.\*' <<<\"\$1\"" _ "$out"
 check "grants scoped to DB_NAME" grep -q 'ON `nunezorganizer`.\* TO' <<<"$out"
 
 echo "== audit script"
-check "audit runs and writes a report" bash "$DEPLOY/audit/vps-audit.sh" --out "$T/audit.txt" --domain localhost
+check "audit runs and writes a report" bash -c 'cd "$1" && shift && bash "$@"' _ "$T" "$DEPLOY/audit/vps-audit.sh" --out "$T/audit.txt" --domain localhost
 check "report is 600" test "$(stat -c %a "$T/audit.txt")" = 600
 check "report has sections" grep -q '==================== PHP ====================' "$T/audit.txt"
 
