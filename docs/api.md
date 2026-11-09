@@ -123,5 +123,29 @@ Cancel one block; the task stays open. Idempotent.
 - A local time that doesn't exist (spring-forward gap, e.g. 02:30 on 2027-03-14 in New York) resolves to the first valid instant after the gap (**03:00**).
 - A local time that happens twice (fall-back, e.g. 01:30 on 2026-11-01 in New York) resolves to its **first** occurrence (EDT).
 
-### Coming next
-`GET /today` and `GET /backlog` (#10).
+## Today and backlog (#10)
+
+Both require `tasks:read` and use **your profile timezone** for day boundaries. `date` (`YYYY-MM-DD`) defaults to your local today.
+
+### `GET /today?date=2026-11-10`
+```json
+{ "date": "2026-11-10", "timezone": "America/New_York",
+  "blocks": [ Occurrence + "task" … ],            // blocks starting on that local day, any state
+  "pending_responses": [ Occurrence + "task" … ], // ended blocks of open tasks still awaiting yes/no
+  "backlog_count": 3 }
+```
+
+### `GET /backlog?date=2026-11-10&per_page=25`
+Carryover is a **query**, not a copy: every **open** task that has at least one attempt that ended **before the start of that local day** and was never resolved (`missed`, `unanswered`, `awaiting_response`, or a `scheduled` block that ended without a prompt). Each task appears **once**, oldest first, until it is completed or cancelled. Weekends and gaps don't matter.
+```json
+{ "data": [ { "task": { "id": "01J…", "title": "Organize my desk", … },
+              "overdue_since": "2026-11-09T15:15:00Z",
+              "attempt_count": 2,
+              "rescheduled": true, "next_attempt_at": "2026-11-11T19:00:00Z",
+              "attempts": [ Occurrence … ] } ],
+  "meta": { "total": 3, … }, "date": "2026-11-10", "timezone": "America/New_York" }
+```
+To retry, `POST /tasks/{id}/occurrences`: the new attempt belongs to the **same** task (it stays in the backlog, flagged `rescheduled`, until resolved).
+
+### Unanswered
+Ended blocks with no answer become `unanswered` after **your** `unanswered_after_minutes` (default **12 hours**, configurable 15 min – 7 days) via `nunez:mark-unanswered`, which the scheduler runs every 5 minutes. Unanswered is **not** "no": the task stays open, stays in the backlog, and can still be completed (classified `late`).

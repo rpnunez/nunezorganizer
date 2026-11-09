@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\DayController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\OccurrenceController;
 use App\Http\Controllers\Api\V1\TaskController;
@@ -19,6 +20,8 @@ Route::prefix('v1')
         Route::middleware('abilities:tasks:read')->group(function () {
             Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');
             Route::get('tasks/{task}', [TaskController::class, 'show'])->name('tasks.show');
+            Route::get('today', [DayController::class, 'today'])->name('today');
+            Route::get('backlog', [DayController::class, 'backlog'])->name('backlog');
         });
 
         Route::middleware('abilities:tasks:write')->group(function () {
