@@ -11,24 +11,23 @@
             </flux:sidebar.header>
 
             <flux:sidebar.nav>
-                <flux:sidebar.group :heading="__('Platform')" class="grid">
-                    <flux:sidebar.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>
-                        {{ __('Dashboard') }}
+                <flux:sidebar.group class="grid">
+                    <flux:sidebar.item icon="sun" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>
+                        {{ __('Today') }}
+                    </flux:sidebar.item>
+                    <flux:sidebar.item icon="inbox-stack" :href="route('backlog')" :current="request()->routeIs('backlog')" wire:navigate>
+                        {{ __('Backlog') }}
+                    </flux:sidebar.item>
+                    <flux:sidebar.item icon="list-bullet" :href="route('tasks.index')" :current="request()->routeIs('tasks.*') && ! request()->routeIs('tasks.create')" wire:navigate>
+                        {{ __('Tasks') }}
+                    </flux:sidebar.item>
+                    <flux:sidebar.item icon="plus-circle" :href="route('tasks.create')" :current="request()->routeIs('tasks.create')" wire:navigate>
+                        {{ __('New task') }}
                     </flux:sidebar.item>
                 </flux:sidebar.group>
             </flux:sidebar.nav>
 
             <flux:spacer />
-
-            <flux:sidebar.nav>
-                <flux:sidebar.item icon="folder-git-2" href="https://github.com/laravel/livewire-starter-kit" target="_blank">
-                    {{ __('Repository') }}
-                </flux:sidebar.item>
-
-                <flux:sidebar.item icon="book-open-text" href="https://laravel.com/docs/starter-kits#livewire" target="_blank">
-                    {{ __('Documentation') }}
-                </flux:sidebar.item>
-            </flux:sidebar.nav>
 
             <x-desktop-user-menu class="hidden lg:block" :name="auth()->user()->name" />
         </flux:sidebar>
@@ -89,6 +88,28 @@
         </flux:header>
 
         {{ $slot }}
+
+        {{-- Bottom tab bar on phones (the sidebar is collapsed there). --}}
+        <nav aria-label="{{ __('Main') }}" class="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden dark:border-zinc-700 dark:bg-zinc-900/95">
+            <ul class="grid grid-cols-4">
+                @foreach ([
+                    ['route' => 'dashboard', 'match' => 'dashboard', 'icon' => 'sun', 'label' => __('Today')],
+                    ['route' => 'backlog', 'match' => 'backlog', 'icon' => 'inbox-stack', 'label' => __('Backlog')],
+                    ['route' => 'tasks.index', 'match' => 'tasks.index', 'icon' => 'list-bullet', 'label' => __('Tasks')],
+                    ['route' => 'tasks.create', 'match' => 'tasks.create', 'icon' => 'plus-circle', 'label' => __('New')],
+                ] as $tab)
+                    @php($active = request()->routeIs($tab['match']))
+                    <li>
+                        <a href="{{ route($tab['route']) }}" wire:navigate
+                           @if ($active) aria-current="page" @endif
+                           class="flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent {{ $active ? 'text-accent-content' : 'text-zinc-500 dark:text-zinc-400' }}">
+                            <flux:icon :name="$tab['icon']" variant="{{ $active ? 'solid' : 'outline' }}" class="size-6" />
+                            <span>{{ $tab['label'] }}</span>
+                        </a>
+                    </li>
+                @endforeach
+            </ul>
+        </nav>
 
         @persist('toast')
             <flux:toast.group>

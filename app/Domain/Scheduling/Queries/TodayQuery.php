@@ -29,7 +29,8 @@ class TodayQuery
     }
 
     /**
-     * Ended blocks of open tasks awaiting a yes/no (at most 50, most recent first).
+     * Ended blocks of open tasks still waiting for a yes/no (at most 50, most recent first):
+     * prompted ones, and ended `scheduled` ones that no prompt has been sent for yet.
      *
      * @return Collection<int, TaskOccurrence>
      */
@@ -37,7 +38,9 @@ class TodayQuery
     {
         return TaskOccurrence::query()
             ->whereHas('task', fn ($q) => $q->where('owner_user_id', $user->id)->where('status', TaskStatus::Open))
-            ->where('state', OccurrenceState::AwaitingResponse)
+            ->where(fn ($q) => $q
+                ->where('state', OccurrenceState::AwaitingResponse)
+                ->orWhere(fn ($q) => $q->where('state', OccurrenceState::Scheduled)->where('scheduled_end_at', '<=', now())))
             ->with('task')
             ->latest('scheduled_end_at')
             ->limit(50)

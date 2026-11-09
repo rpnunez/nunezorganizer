@@ -1,5 +1,6 @@
 <?php
 
+use App\Domain\Tasks\Exceptions\TaskStateConflict;
 use App\Http\Middleware\EnsureTenant;
 use App\Http\Middleware\EnsureUserIsApproved;
 use Illuminate\Foundation\Application;
@@ -44,6 +45,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+
+        // Expected user-level outcomes (409), not failures: keep them out of error logs.
+        $exceptions->dontReport([TaskStateConflict::class]);
 
         // Never reveal model class names or IDs (e.g. "No query results for model [App\Models\Task]").
         $exceptions->render(function (NotFoundHttpException $e, Request $request) {
