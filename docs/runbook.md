@@ -24,9 +24,9 @@ Operating NunezOrganizer on the DevStackTips VPS, fully isolated from WordPress 
 
 | Concern | WordPress | NunezOrganizer |
 |---|---|---|
-| Unix user | existing WP user | dedicated `nunezorg`; no sudo except one `lswsctrl restart` rule |
-| Files | WP docroot | `/home/nunezorg/nunezorganizer` (0750), docroot `current/public` |
-| PHP | WP's LSPHP handler | its own LSAPI external app running as `nunezorg` (PHP 8.4) |
+| Unix user | `nsosu` | **also `nsosu`** (owner decision: shared Webuzo user). PHP for both runs as the same Unix user, so file-level isolation between the sites is not provided; DB, secrets and vhost isolation still are |
+| Files | WP docroot | `/home/nsosu/sites/organizer.nunezserver.online` (0750), docroot `current/public` |
+| PHP | site's LSPHP handler | its own LSAPI external app (PHP 8.4) |
 | Database | WP schema/user | own schema `nunezorganizer`; users granted on that schema only, `@localhost`/`@127.0.0.1` |
 | Secrets | `wp-config.php` | `shared/.env` (0600) and `~/.config/nunezorganizer/backup.my.cnf` (0600) |
 | Vhost | WP vhost | own OLS vhost and domain map; `restrained 1` keeps scripts inside `vhRoot` |
@@ -45,12 +45,15 @@ It writes `nunez-vps-audit-<timestamp>.txt` (mode 600). Public IPs are masked an
 
 ## 1. First-time setup
 
-Run as root unless the step says `sudo -u nunezorg`.
+Run as root unless the step says `sudo -u nsosu`.
 
 ```bash
-# 1. dedicated user (if Webuzo doesn't create one when you add the domain)
-useradd --create-home --shell /bin/bash nunezorg
-chmod 750 /home/nunezorg
+# 1. In Webuzo (as nsosu): Add Domain -> Subdomain "organizer" . nunezserver.online,
+#    Domain Path: sites/organizer.nunezserver.online/current/public, tick Let's Encrypt.
+#    Webuzo creates current/public as real folders; current must become a symlink, so
+#    check they hold nothing but a placeholder, then remove them:
+ls -la /home/nsosu/sites/organizer.nunezserver.online/current/public
+rm -rf /home/nsosu/sites/organizer.nunezserver.online/current
 
 # 2. deploy scripts: a throwaway checkout is enough until the first release exists
 git clone https://github.com/rpnunez/nunezorganizer.git /root/nunez-deploy
@@ -64,34 +67,34 @@ echo 'age1...yourpublickey' > /etc/nunezorganizer/backup-recipients.txt
 chmod 644 /etc/nunezorganizer/backup-recipients.txt
 
 # 4. directory layout + .env skeleton (generates APP_KEY)
-cp -r /root/nunez-deploy /home/nunezorg/nunez-deploy && chown -R nunezorg: /home/nunezorg/nunez-deploy
-sudo -u nunezorg /home/nunezorg/nunez-deploy/deploy/bin/bootstrap-layout.sh
+cp -r /root/nunez-deploy /home/nsosu/nunez-deploy && chown -R nsosu: /home/nsosu/nunez-deploy
+sudo -u nsosu /home/nsosu/nunez-deploy/deploy/bin/bootstrap-layout.sh
 
 # 5. database + least-privilege users (review the dry run first)
 /root/nunez-deploy/deploy/bin/provision-database.sh            # prints SQL, passwords masked
 /root/nunez-deploy/deploy/bin/provision-database.sh --apply    # writes DB_PASSWORD + backup.my.cnf
 
-# 6. fill MAIL_* in /home/nunezorg/nunezorganizer/shared/.env, then validate
-sudo -u nunezorg /home/nunezorg/nunez-deploy/deploy/bin/check-env.sh
+# 6. fill MAIL_* in /home/nsosu/sites/organizer.nunezserver.online/shared/.env, then validate
+sudo -u nsosu /home/nsosu/nunez-deploy/deploy/bin/check-env.sh
 
 # 7. web server (see below), TLS, then system files (see below)
 
 # 8. first release (runs migrations on an empty DB)
-sudo -u nunezorg /home/nunezorg/nunez-deploy/deploy/bin/release.sh --migrate
+sudo -u nsosu /home/nsosu/nunez-deploy/deploy/bin/release.sh --migrate
 systemctl start nunezorganizer-queue
-rm -rf /home/nunezorg/nunez-deploy /root/nunez-deploy   # from now on use current/deploy/bin
+rm -rf /home/nsosu/nunez-deploy /root/nunez-deploy   # from now on use current/deploy/bin
 ```
 
-From then on, run every script from `/home/nunezorg/nunezorganizer/current/deploy/bin/`.
+From then on, run every script from `/home/nsosu/sites/organizer.nunezserver.online/current/deploy/bin/`.
 
 ## Web server
 
 Webuzo manages `httpd_config.conf` and can overwrite hand edits. Do it in this order:
 
-1. **Preferred:** add the subdomain in Webuzo under the `nunezorg` user, choose PHP 8.4, and issue the TLS certificate there.
-2. Set the docroot to `/home/nunezorg/nunezorganizer/current/public`.
+1. Add the subdomain in Webuzo as `nsosu` (see first-time setup, step 1), choose PHP 8.4, and issue the TLS certificate there.
+2. The docroot must be `/home/nsosu/sites/organizer.nunezserver.online/current/public`.
 3. Compare the vhost Webuzo generated with `deploy/build/openlitespeed/vhconf.conf` (render it first; see the next section). Make sure the generated vhost has:
-   - the PHP handler runs as `nunezorg` (`extUser`/`extGroup` or `setUIDMode 2`), not `nobody` and not the WP user
+   - the PHP handler runs as `nsosu` (`extUser`/`extGroup` or `setUIDMode 2`), not `nobody`
    - `allowSymbolLink 1` (the docroot is reached through the `current` symlink)
    - rewrite enabled with `.htaccess` loading (Laravel's `public/.htaccess`)
    - an HTTP→HTTPS redirect that still lets `/.well-known/acme-challenge/` through
@@ -107,7 +110,7 @@ The dotfile-deny context uses a PCRE lookahead. If OLS rejects it, delete that c
 ## Install server files
 
 ```bash
-cd /home/nunezorg/nunezorganizer/current        # or the throwaway checkout on first setup
+cd /home/nsosu/sites/organizer.nunezserver.online/current        # or the throwaway checkout on first setup
 deploy/bin/render-templates.sh --out /root/nunez-build
 less -R /root/nunez-build/*/*                      # review
 deploy/bin/install-system-files.sh --build /root/nunez-build           # dry run with diffs
@@ -125,7 +128,7 @@ Anything it replaces is kept as `*.bak.<timestamp>`.
 ## Deploy a release
 
 ```bash
-sudo -u nunezorg /home/nunezorg/nunezorganizer/current/deploy/bin/release.sh [--ref <branch|tag|sha>]
+sudo -u nsosu /home/nsosu/sites/organizer.nunezserver.online/current/deploy/bin/release.sh [--ref <branch|tag|sha>]
 ```
 
 What it does, in order:
@@ -149,9 +152,9 @@ Every action is appended to `shared/logs/releases.log`.
 ## Rollback
 
 ```bash
-sudo -u nunezorg .../current/deploy/bin/rollback.sh --list
-sudo -u nunezorg .../current/deploy/bin/rollback.sh            # to the previous release
-sudo -u nunezorg .../current/deploy/bin/rollback.sh --to <release-dir>
+sudo -u nsosu .../current/deploy/bin/rollback.sh --list
+sudo -u nsosu .../current/deploy/bin/rollback.sh            # to the previous release
+sudo -u nsosu .../current/deploy/bin/rollback.sh --to <release-dir>
 ```
 
 Rollback switches code only. If the release you're leaving ran migrations (`migrated=1` in `releases.log`; the script warns), check before rolling back:
@@ -164,7 +167,7 @@ Rollback switches code only. If the release you're leaving ran migrations (`migr
 
 ## Backups
 
-Nightly at 03:17 (cron), `backup.sh` writes three files to `/home/nunezorg/backups` (0700):
+Nightly at 03:17 (cron), `backup.sh` writes three files to `/home/nsosu/backups/nunezorganizer` (0700):
 
 | File | Contents |
 |---|---|
@@ -185,7 +188,7 @@ Do this at least once before the pilot (an acceptance criterion of #21), and aft
 Preferred: run it on your own machine, which has the private key:
 
 ```bash
-scp nunezorg@vps:backups/nunezorganizer-<ts>.* .
+scp nsosu@vps:backups/nunezorganizer-<ts>.* .
 deploy/bin/restore.sh --set ./nunezorganizer-<ts> --identity ~/nunez-backup.key --verify-only
 deploy/bin/restore.sh --set ./nunezorganizer-<ts> --identity ~/nunez-backup.key --files-to ./restored-files
 # restores into nunezorganizer_restore_test on your local MariaDB and prints table row counts
@@ -195,7 +198,7 @@ On the server, as root, with the key copied over just for the drill and deleted 
 
 ```bash
 install -m 600 /dev/stdin /root/drill.key   # paste the key, then Ctrl-D
-.../current/deploy/bin/restore.sh --set /home/nunezorg/backups/nunezorganizer-<ts> --identity /root/drill.key
+.../current/deploy/bin/restore.sh --set /home/nsosu/backups/nunezorganizer/nunezorganizer-<ts> --identity /root/drill.key
 shred -u /root/drill.key
 mariadb -e 'DROP DATABASE nunezorganizer_restore_test'
 ```
@@ -227,9 +230,9 @@ Nothing to do if setup is complete. Check:
 ## Changing .env
 
 ```bash
-sudo -u nunezorg $EDITOR /home/nunezorg/nunezorganizer/shared/.env
-sudo -u nunezorg .../current/deploy/bin/check-env.sh
-cd /home/nunezorg/nunezorganizer/current && sudo -u nunezorg php artisan config:cache && sudo -u nunezorg php artisan queue:restart
+sudo -u nsosu $EDITOR /home/nsosu/sites/organizer.nunezserver.online/shared/.env
+sudo -u nsosu .../current/deploy/bin/check-env.sh
+cd /home/nsosu/sites/organizer.nunezserver.online/current && sudo -u nsosu php artisan config:cache && sudo -u nsosu php artisan queue:restart
 /usr/local/lsws/bin/lswsctrl restart
 ```
 
@@ -244,7 +247,7 @@ This becomes relevant once M4 ships (#15/#16). After each change of domain, `TEL
 `check-env.sh` enforces most of these:
 
 - [ ] `APP_ENV=production`, `APP_DEBUG=false`, a `base64:` `APP_KEY`, an `https://` `APP_URL`
-- [ ] `.env` is mode 600 and owned by `nunezorg`
+- [ ] `.env` is mode 600 and owned by `nsosu`
 - [ ] `DB_*`: not root, not the Docker values (`mariadb`/`secret`); `DB_HOST=127.0.0.1`
 - [ ] `SESSION_SECURE_COOKIE=true`, `SESSION_HTTP_ONLY=true`, `SESSION_ENCRYPT=true`, `SESSION_SAME_SITE=lax`
 - [ ] `LOG_STACK=single`, `LOG_LEVEL=warning` (logrotate handles rotation)
@@ -257,7 +260,8 @@ This becomes relevant once M4 ships (#15/#16). After each change of domain, `TEL
 
 | Decision | Needed for | Default in artifacts |
 |---|---|---|
-| Subdomain | vhost, TLS, `APP_URL` | `organizer.example.com` placeholder |
+| Subdomain | vhost, TLS, `APP_URL` | **decided:** `organizer.nunezserver.online` |
+| Unix user | file isolation | **decided:** `nsosu` (shared with the other sites) |
 | Staging vhost? | restore drill target, pre-prod releases | none; the drill uses `<db>_restore_test` |
 | VPS PHP 8.4 path | `PHP_BIN`, `LSPHP_BIN` | `/usr/local/lsws/lsphp84/bin/*` |
 | systemd or supervisor | queue worker | systemd |

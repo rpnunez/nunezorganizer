@@ -22,7 +22,10 @@ mkdir -p "$RELEASES_DIR" "$DEPLOY_LOG_DIR" \
   "$SHARED_DIR/storage/app/public" "$SHARED_DIR/storage/app/private" \
   "$SHARED_DIR/storage/framework/cache/data" "$SHARED_DIR/storage/framework/sessions" \
   "$SHARED_DIR/storage/framework/views" "$SHARED_DIR/storage/logs"
-chmod 750 "$APP_ROOT" "$SHARED_DIR"
+# APP_ROOT 711: the web server (not APP_USER) must traverse it to serve current/public's
+# static files, but can't list it. shared/ holds .env and storage: owner + group only.
+chmod 711 "$APP_ROOT"
+chmod 750 "$SHARED_DIR"
 
 mkdir -p "$BACKUP_DIR"
 chmod 700 "$BACKUP_DIR"

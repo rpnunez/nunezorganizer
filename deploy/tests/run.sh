@@ -141,6 +141,8 @@ echo "== bootstrap + check-env"
 check "bootstrap-layout" "$BIN/bootstrap-layout.sh"
 ENVF="$APP_ROOT/shared/.env"
 check "shared/.env is 600" test "$(stat -c %a "$ENVF")" = 600
+check "APP_ROOT traversable by web server (711)" test "$(stat -c %a "$APP_ROOT")" = 711
+check "shared/ closed to others (750)" test "$(stat -c %a "$APP_ROOT/shared")" = 750
 check "APP_KEY generated" grep -qE '^APP_KEY=base64:.{40,}$' "$ENVF"
 check_not "check-env rejects empty DB_PASSWORD" "$BIN/check-env.sh" "$ENVF"
 sed -i 's/^DB_PASSWORD=.*/DB_PASSWORD=0123456789abcdef0123456789abcdef/' "$ENVF"
