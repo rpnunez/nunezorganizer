@@ -1,8 +1,8 @@
-# NunezOrganizer production runbook
+# Reference deployment: Webuzo + OpenLiteSpeed
 
-Running NunezOrganizer at **https://organizer.nunezserver.online** on the Webuzo/OpenLiteSpeed VPS that also hosts DevStackTips (issue #21).
+A complete, worked production deployment of NunezOrganizer using the zero-downtime `deploy/` scripts, on a VPS managed by **Webuzo** with **OpenLiteSpeed**, shared with other sites (for example WordPress). For other hosts (plain nginx/Apache, any Linux), start with [install.md](install.md). The scripts and steps are the same; only the web server part differs.
 
-> **Status:** artifacts ready, nothing deployed yet. **Do not deploy without explicit owner instruction.** First read [Before go-live](#before-go-live): one app-side fix is needed first.
+Placeholders: `<user>` is the Webuzo user that owns the site, `<domain>` is the app's hostname (e.g. `organizer.example.com`), and `<parent-domain>` is the domain it's a subdomain of. Replace them everywhere below.
 
 - [Isolation model](#isolation-model)
 - [Server profile](#server-profile)
@@ -25,43 +25,38 @@ Running NunezOrganizer at **https://organizer.nunezserver.online** on the Webuzo
 
 ## Isolation model
 
-| Concern | DevStackTips (WordPress) | NunezOrganizer |
+| Concern | Other sites (e.g. WordPress) | NunezOrganizer |
 |---|---|---|
-| Unix user | `nsosu` | **also `nsosu`**. This was the owner's decision: one Webuzo user for every site. PHP for both runs as the same Unix user, so the sites are **not** isolated from each other at the file level. Database, secrets and vhost isolation still apply. |
-| Files | `/home/nsosu/sites/devstacktips/public_html` | `/home/nsosu/sites/organizer.nunezserver.online/` (0711; `shared/` 0750), docroot `current/public` |
+| Unix user | `<user>` | Ideally a **separate** Webuzo user. If you add the domain under the same user as your other sites, PHP for all of them runs as one Unix user, so the sites are **not** isolated from each other at the file level. Database, secrets and vhost isolation still apply. |
+| Files | `/home/<user>/sites/<other-site>/public_html` | `/home/<user>/sites/<domain>/` (0711; `shared/` 0750), docroot `current/public` |
 | PHP | its Webuzo-selected LSPHP | PHP 8.4 (`/usr/local/apps/php84`) selected for this domain in Webuzo |
-| Database | `nsosu_dst_prod` / `nsosu_dst` | own schema `nunezorganizer`; users granted on that schema only, `@localhost` and `@127.0.0.1` |
+| Database | their own schemas and users | own schema `nunezorganizer`; users granted on that schema only, `@localhost` and `@127.0.0.1` |
 | Secrets | `wp-config.php` | `shared/.env` (0600) and `~/.config/nunezorganizer/backup.my.cnf` (0600) |
-| Vhost | Webuzo vhost | its own Webuzo vhost (`webuzo_vh/organizer.nunezserver.online-*`), `restrained 1`, `setUIDMode 2` |
+| Vhost | Webuzo vhost | its own Webuzo vhost (`webuzo_vh/<domain>-*`), `restrained 1`, `setUIDMode 2` |
 
 All deploy settings live in `/etc/nunezorganizer/deploy.env`, a copy of `deploy/deploy.env.example`. Every script reads that file.
 
 ## Server profile
 
-From the audit on 2026-11-09:
+What a typical Webuzo host looks like (from running `deploy/audit/vps-audit.sh` on the reference server). Run the audit on yours and compare:
 
 | Item | Value | Effect on deployment |
 |---|---|---|
-| OS | AlmaLinux 8.10, systemd 239, SELinux disabled | The systemd unit uses only directives systemd 239 supports |
-| Web | OpenLiteSpeed 1.9.3 managed by Webuzo. Per-domain vhosts in `/usr/local/lsws/conf/webuzo_vh/<domain>-80` and `-443`. `allowSymbolLink 1`, `restrained 1`, `setUIDMode 2` | Webuzo writes the vhost: **don't hand-edit**. The `current` symlink docroot is allowed |
-| PHP | `/usr/local/apps/php84/bin/{php,lsphp}` 8.4.27, all required extensions present | `PHP_BIN`/`LSPHP_BIN` in `deploy.env` |
-| DB | MariaDB 10.6.28, socket `/var/lib/mysql/mysql.sock`, `time_zone=SYSTEM` (America/New_York) | See [Before go-live](#before-go-live) |
-| TLS | Let's Encrypt via Webuzo; cert for `organizer.nunezserver.online` valid to 2027-02-07 | Webuzo renews it |
+| OS | AlmaLinux 8, systemd 239 | The systemd unit uses only directives systemd 239 supports |
+| Web | OpenLiteSpeed managed by Webuzo. Per-domain vhosts in `/usr/local/lsws/conf/webuzo_vh/<domain>-80` and `-443`. `allowSymbolLink 1`, `restrained 1`, `setUIDMode 2` | Webuzo writes the vhost: **don't hand-edit**. The `current` symlink docroot is allowed |
+| PHP | `/usr/local/apps/php84/bin/{php,lsphp}`, all required extensions present | `PHP_BIN`/`LSPHP_BIN` in `deploy.env` |
+| DB | MariaDB 10.6, socket `/var/lib/mysql/mysql.sock`, often `time_zone=SYSTEM` (local time) | Fine: the app forces UTC per connection |
+| TLS | Let's Encrypt via Webuzo (tick it when adding the domain) | Webuzo renews it |
 | Node | **not installed** | Install Node 22 ([Prerequisites](#prerequisites)) |
 | Backup crypto | gpg 2.2.20 present, age missing | Backups default to gpg |
 | Mail | Local Exim on 25/465/587 | `MAIL_MAILER=sendmail` |
-| Cron | cronie is active. `/var/spool/cron/nsosu` already runs another app's `schedule:run` | This app adds `/etc/cron.d/nunezorganizer` and leaves the existing crontab alone |
-| Server timezone | America/New_York | Cron times in `/etc/cron.d/nunezorganizer` are New York time. The app itself uses UTC |
+| Cron | cronie is active; the user's crontab may already hold other apps' jobs | This app adds `/etc/cron.d/nunezorganizer` and leaves user crontabs alone |
+| Server timezone | often a local zone (e.g. America/New_York) | Cron times in `/etc/cron.d/nunezorganizer` are server time. The app itself uses UTC |
 
 ## Before go-live
 
-1. **The database session timezone must be UTC.**
-   - The server's MariaDB `time_zone` is `SYSTEM`, which here means America/New_York.
-   - The app's `config/database.php` doesn't set a connection timezone, so `TIMESTAMP` columns (Laravel's `timestamps()`, `useCurrent()`) are converted through New York time.
-   - UTC values that fall in the spring-forward hour get shifted, and `CURRENT_TIMESTAMP` defaults come out in local time. That breaks ADR 0003.
-   - Fix it in the app: add `'timezone' => env('DB_TIMEZONE', '+00:00')` to the `mysql` and `mariadb` connections, with a test.
-   - Don't change the server-wide `default_time_zone`: the WordPress sites share this MariaDB.
-2. **Merge the deploy PR first.** Releases are cut from `master`, and cron runs `current/deploy/bin/*` from the live release. So `deploy/` must be on `master` before the first release.
+1. **Merge the deploy tooling to `master` first.** Releases are cut from `master`, and cron runs `current/deploy/bin/*` from the live release.
+2. The database timezone is handled by the app: `config/database.php` forces the connection to `+00:00`, so a MariaDB running in local time (`time_zone=SYSTEM`) is fine. Don't change the server-wide setting if other sites share the database server.
 
 ## 0. Audit the server (read-only)
 
@@ -69,7 +64,7 @@ From the audit on 2026-11-09:
 mkdir -p /root/nunez-audit && cd /root/nunez-audit
 curl -fsSL -o vps-audit.sh https://raw.githubusercontent.com/rpnunez/nunezorganizer/master/deploy/audit/vps-audit.sh
 bash -n vps-audit.sh && chmod +x vps-audit.sh
-./vps-audit.sh --domain organizer.nunezserver.online --app-user nsosu
+./vps-audit.sh --domain <domain> --app-user <user>
 ```
 
 The report goes to `nunez-vps-audit-<timestamp>.txt` (mode 600):
@@ -90,11 +85,11 @@ node --version          # must print v22.18 or newer
 #   curl -fsSL https://rpm.nodesource.com/setup_22.x | bash - && dnf install -y nodejs
 ```
 
-In Webuzo, as `nsosu`:
-1. **Domain**: `organizer.nunezserver.online`, path `sites/organizer.nunezserver.online/current/public`, Let's Encrypt ticked. ✅ done 2026-11-09, and the placeholder `current/` was removed.
+In Webuzo, as `<user>`:
+1. **Domain**: `<domain>`, path `sites/<domain>/current/public`, Let's Encrypt ticked. Webuzo creates `current/public` as real folders; remove them before the first release so `current` can become a symlink: `rm -rf /home/<user>/sites/<domain>/current` (check that they hold only a placeholder first).
 2. **PHP version** for the domain: **PHP 8.4** (Webuzo's PHP / MultiPHP settings for the domain).
 3. **Force HTTPS** for the domain, if Webuzo offers the toggle. [Web server](#web-server) shows how to verify.
-4. **Email → DKIM/SPF** for `nunezserver.online`, so verification and password-reset emails from `no-reply@nunezserver.online` aren't marked as spam.
+4. **Email → DKIM/SPF** for `<parent-domain>`, so verification and password-reset emails from `no-reply@<parent-domain>` aren't marked as spam.
 
 **Backup key, on your Windows PC.** The private key never goes on the server.
 1. Install **Gpg4win** and open **Kleopatra**.
@@ -105,34 +100,36 @@ In Webuzo, as `nsosu`:
 
 ## 1. First-time setup
 
-Run as root. Lines with `sudo -u nsosu` run as the site user.
+Run as root. Lines with `sudo -u <user>` run as the site user.
 
 ```bash
-APP=/home/nsosu/sites/organizer.nunezserver.online
+APP=/home/<user>/sites/<domain>
 
 # 1. deploy scripts: a throwaway checkout until the first release exists
 git clone https://github.com/rpnunez/nunezorganizer.git /root/nunez-deploy
 install -d -m 755 /etc/nunezorganizer
 install -m 644 /root/nunez-deploy/deploy/deploy.env.example /etc/nunezorganizer/deploy.env
+#    -> set APP_DOMAIN, and uncomment the "Webuzo + OpenLiteSpeed profile" block
+#       (APP_USER, APP_ROOT, PHP_BIN, LSPHP_BIN, WEB_RELOAD_PRIVILEGED_CMD, SSL_*)
 
-# 2. backup key: import YOUR public key into a dedicated keyring for nsosu
-sudo -u nsosu mkdir -p /home/nsosu/.config/nunezorganizer/gnupg
-chmod 700 /home/nsosu/.config/nunezorganizer /home/nsosu/.config/nunezorganizer/gnupg
-sudo -u nsosu env GNUPGHOME=/home/nsosu/.config/nunezorganizer/gnupg gpg --batch --import < /root/nunez-backup-public.asc
-sudo -u nsosu env GNUPGHOME=/home/nsosu/.config/nunezorganizer/gnupg gpg --list-keys --with-colons | awk -F: '/^fpr/ {print $10; exit}'
+# 2. backup key: import YOUR public key into a dedicated keyring for <user>
+sudo -u <user> mkdir -p /home/<user>/.config/nunezorganizer/gnupg
+chmod 700 /home/<user>/.config/nunezorganizer /home/<user>/.config/nunezorganizer/gnupg
+sudo -u <user> env GNUPGHOME=/home/<user>/.config/nunezorganizer/gnupg gpg --batch --import < /root/nunez-backup-public.asc
+sudo -u <user> env GNUPGHOME=/home/<user>/.config/nunezorganizer/gnupg gpg --list-keys --with-colons | awk -F: '/^fpr/ {print $10; exit}'
 #    -> put that fingerprint in BACKUP_GPG_RECIPIENT, and set CRON_MAILTO (where alerts go):
 nano /etc/nunezorganizer/deploy.env
 
 # 3. directory layout + .env skeleton (generates APP_KEY)
-cp -r /root/nunez-deploy /home/nsosu/nunez-deploy && chown -R nsosu:nsosu /home/nsosu/nunez-deploy
-sudo -u nsosu /home/nsosu/nunez-deploy/deploy/bin/bootstrap-layout.sh
+cp -r /root/nunez-deploy /home/<user>/nunez-deploy && chown -R <user>:<user> /home/<user>/nunez-deploy
+sudo -u <user> /home/<user>/nunez-deploy/deploy/bin/bootstrap-layout.sh
 
 # 4. database + least-privilege users (review the dry run first)
 /root/nunez-deploy/deploy/bin/provision-database.sh            # prints SQL, passwords masked
 /root/nunez-deploy/deploy/bin/provision-database.sh --apply    # writes DB_PASSWORD + backup.my.cnf
 
 # 5. validate .env (mail is already set to local sendmail)
-sudo -u nsosu /home/nsosu/nunez-deploy/deploy/bin/check-env.sh
+sudo -u <user> /home/<user>/nunez-deploy/deploy/bin/check-env.sh
 
 # 6. queue worker, cron, logrotate, sudoers (dry run, review, then apply)
 /root/nunez-deploy/deploy/bin/render-templates.sh --out /root/nunez-build
@@ -140,56 +137,56 @@ sudo -u nsosu /home/nsosu/nunez-deploy/deploy/bin/check-env.sh
 /root/nunez-deploy/deploy/bin/install-system-files.sh --build /root/nunez-build --apply
 
 # 7. first release: runs migrations on the empty DB, then starts the worker
-sudo -u nsosu /home/nsosu/nunez-deploy/deploy/bin/release.sh --migrate
+sudo -u <user> /home/<user>/nunez-deploy/deploy/bin/release.sh --migrate
 systemctl start nunezorganizer-queue
 
 # 8. first backup, and check that everything reports healthy
-sudo -u nsosu $APP/current/deploy/bin/backup.sh --label first
-sudo -u nsosu $APP/current/deploy/bin/healthcheck.sh --verbose
+sudo -u <user> $APP/current/deploy/bin/backup.sh --label first
+sudo -u <user> $APP/current/deploy/bin/healthcheck.sh --verbose
 
 # 9. create your account (invite-only registration)
-cd $APP/current && sudo -u nsosu /usr/local/apps/php84/bin/php artisan nunez:invite you@example.com
-rm -rf /home/nsosu/nunez-deploy /root/nunez-deploy /root/nunez-build   # from now on use current/deploy/bin
+cd $APP/current && sudo -u <user> /usr/local/apps/php84/bin/php artisan nunez:invite you@example.com
+rm -rf /home/<user>/nunez-deploy /root/nunez-deploy /root/nunez-build   # from now on use current/deploy/bin
 ```
 
-From then on, run every script from `/home/nsosu/sites/organizer.nunezserver.online/current/deploy/bin/`.
+From then on, run every script from `/home/<user>/sites/<domain>/current/deploy/bin/`.
 
 ## Web server
 
 Webuzo generates and owns the OpenLiteSpeed config:
 - `/usr/local/lsws/conf/httpd_config.conf` holds the listeners and maps
-- `/usr/local/lsws/conf/webuzo_vh/organizer.nunezserver.online-{80,443}/vhost.conf` holds the per-domain vhost
+- `/usr/local/lsws/conf/webuzo_vh/<domain>-{80,443}/vhost.conf` holds the per-domain vhost
 
 **Don't edit these by hand;** Webuzo rewrites them. Make changes in the Webuzo UI. The files in `deploy/templates/openlitespeed/` are a reference to compare against, not something to install.
 
-What the 2026-11-09 audit already confirmed for this vhost:
-- `vhRoot /home/nsosu/`
+What the audit typically shows for a Webuzo vhost (confirm on yours):
+- `vhRoot /home/<user>/`
 - `allowSymbolLink 1`, which the `current` symlink needs
 - `restrained 1`
-- `setUIDMode 2`, so PHP runs as `nsosu`, the docroot owner
+- `setUIDMode 2`, so PHP runs as `<user>`, the docroot owner
 - a Let's Encrypt certificate is issued
 
 Check the generated vhost (read-only):
 ```bash
 grep -nE 'docRoot|vhDomain|lsphp|php8|extUser|extGroup|autoLoadHtaccess|enable|certFile|RewriteRule' \
-  /usr/local/lsws/conf/webuzo_vh/organizer.nunezserver.online-443/vhost.conf
+  /usr/local/lsws/conf/webuzo_vh/<domain>-443/vhost.conf
 ```
 It should show:
-- `docRoot` → `/home/nsosu/sites/organizer.nunezserver.online/current/public`
+- `docRoot` → `/home/<user>/sites/<domain>/current/public`
 - the PHP handler path → `/usr/local/apps/php84/bin/lsphp`
 - rewrite enabled with `.htaccess` loading (Laravel's `public/.htaccess`)
 
 After the first release:
-- `curl -sI http://organizer.nunezserver.online/healthz` → `301` to https (if not, turn on Force HTTPS in Webuzo)
-- `curl -s https://organizer.nunezserver.online/healthz` → `200`
-- `curl -s -o /dev/null -w '%{http_code}' https://organizer.nunezserver.online/.env` → `404`
+- `curl -sI http://<domain>/healthz` → `301` to https (if not, turn on Force HTTPS in Webuzo)
+- `curl -s https://<domain>/healthz` → `200`
+- `curl -s -o /dev/null -w '%{http_code}' https://<domain>/.env` → `404`
 
 Security headers (HSTS, nosniff, frame-deny) aren't added by the Webuzo vhost. OpenLiteSpeed's `.htaccess` doesn't support `Header` directives, so they have to come from the app (a small Laravel middleware). That's tracked as an app follow-up.
 
 ## Install server files
 
 ```bash
-cd /home/nsosu/sites/organizer.nunezserver.online/current        # or the throwaway checkout on first setup
+cd /home/<user>/sites/<domain>/current        # or the throwaway checkout on first setup
 deploy/bin/render-templates.sh --out /root/nunez-build
 less -R /root/nunez-build/*/*                      # review
 deploy/bin/install-system-files.sh --build /root/nunez-build           # dry run with diffs
@@ -207,7 +204,7 @@ Anything it replaces is kept as `*.bak.<timestamp>`.
 ## Deploy a release
 
 ```bash
-sudo -u nsosu /home/nsosu/sites/organizer.nunezserver.online/current/deploy/bin/release.sh [--ref <branch|tag|sha>]
+sudo -u <user> /home/<user>/sites/<domain>/current/deploy/bin/release.sh [--ref <branch|tag|sha>]
 ```
 
 What it does, in order:
@@ -231,9 +228,9 @@ Every action is appended to `shared/logs/releases.log`.
 ## Rollback
 
 ```bash
-sudo -u nsosu .../current/deploy/bin/rollback.sh --list
-sudo -u nsosu .../current/deploy/bin/rollback.sh            # to the previous release
-sudo -u nsosu .../current/deploy/bin/rollback.sh --to <release-dir>
+sudo -u <user> .../current/deploy/bin/rollback.sh --list
+sudo -u <user> .../current/deploy/bin/rollback.sh            # to the previous release
+sudo -u <user> .../current/deploy/bin/rollback.sh --to <release-dir>
 ```
 
 Rollback switches code only. If the release you're leaving ran migrations (`migrated=1` in `releases.log`; the script warns), check before rolling back:
@@ -246,7 +243,7 @@ Rollback switches code only. If the release you're leaving ran migrations (`migr
 
 ## Backups
 
-Nightly at 03:17 server time (New York), `backup.sh` writes three files to `/home/nsosu/backups/nunezorganizer` (0700):
+Nightly at 03:17 server time (New York), `backup.sh` writes three files to `/home/<user>/backups/nunezorganizer` (0700):
 
 | File | Contents |
 |---|---|
@@ -255,11 +252,11 @@ Nightly at 03:17 server time (New York), `backup.sh` writes three files to `/hom
 | `nunezorganizer-<ts>.sha256` | checksums of the two files above |
 
 - **No plaintext ever touches the disk.** The dump is streamed through gzip and gpg.
-- The server's keyring (`/home/nsosu/.config/nunezorganizer/gnupg`) holds **only your public key**. `backup.sh` refuses to run if the matching private key is ever imported there.
+- The server's keyring (`/home/<user>/.config/nunezorganizer/gnupg`) holds **only your public key**. `backup.sh` refuses to run if the matching private key is ever imported there.
 - The dump user has `SELECT, LOCK TABLES, SHOW VIEW, TRIGGER, EVENT` on `nunezorganizer` only. Its credentials sit in an option file, never in argv.
 - Retention is `BACKUP_RETENTION_DAYS` (14).
-- **Off-site copies:** Webuzo's Backuply already runs on this server. Either add `/home/nsosu/backups/nunezorganizer` to its backup set, or set `BACKUP_OFFSITE_HOOK` to a script that copies the files elsewhere. Backups that never leave the box don't help if the VPS itself is lost.
-- Manual backup: `sudo -u nsosu .../current/deploy/bin/backup.sh --label <why>`.
+- **Off-site copies:** Webuzo's Backuply already runs on this server. Either add `/home/<user>/backups/nunezorganizer` to its backup set, or set `BACKUP_OFFSITE_HOOK` to a script that copies the files elsewhere. Backups that never leave the box don't help if the VPS itself is lost.
+- Manual backup: `sudo -u <user> .../current/deploy/bin/backup.sh --label <why>`.
 
 `age` is also supported (`BACKUP_ENCRYPTION=age`), but it isn't installed on this server.
 
@@ -275,11 +272,11 @@ That proves the backup can be decrypted. Then do a full restore into a scratch d
 
 **On the server, as root, with the private key present only for the drill:**
 ```bash
-# import the private key into a TEMPORARY keyring, never nsosu's backup keyring
+# import the private key into a TEMPORARY keyring, never <user>'s backup keyring
 export GNUPGHOME=$(mktemp -d) && chmod 700 "$GNUPGHOME"
 gpg --import /root/nunez-backup-secret.asc          # uploaded via File Manager for the drill
-APP=/home/nsosu/sites/organizer.nunezserver.online
-SET=$(ls -1t /home/nsosu/backups/nunezorganizer/*.sha256 | head -n1); SET=${SET%.sha256}
+APP=/home/<user>/sites/<domain>
+SET=$(ls -1t /home/<user>/backups/nunezorganizer/*.sha256 | head -n1); SET=${SET%.sha256}
 NUNEZ_DEPLOY_CONFIG=/etc/nunezorganizer/deploy.env $APP/current/deploy/bin/restore.sh --set "$SET" --identity gpg --verify-only
 NUNEZ_DEPLOY_CONFIG=/etc/nunezorganizer/deploy.env $APP/current/deploy/bin/restore.sh --set "$SET" --identity gpg --files-to /root/restore-drill-files
 mariadb -e 'DROP DATABASE nunezorganizer_restore_test'
@@ -313,9 +310,9 @@ Nothing to do if setup is complete. Check:
 ## Changing .env
 
 ```bash
-sudo -u nsosu nano /home/nsosu/sites/organizer.nunezserver.online/shared/.env
-sudo -u nsosu .../current/deploy/bin/check-env.sh
-cd /home/nsosu/sites/organizer.nunezserver.online/current && sudo -u nsosu /usr/local/apps/php84/bin/php artisan config:cache && sudo -u nsosu /usr/local/apps/php84/bin/php artisan queue:restart
+sudo -u <user> nano /home/<user>/sites/<domain>/shared/.env
+sudo -u <user> .../current/deploy/bin/check-env.sh
+cd /home/<user>/sites/<domain>/current && sudo -u <user> /usr/local/apps/php84/bin/php artisan config:cache && sudo -u <user> /usr/local/apps/php84/bin/php artisan queue:restart
 /usr/local/lsws/bin/lswsctrl restart
 ```
 
@@ -330,7 +327,7 @@ This becomes relevant once M4 ships (#15/#16). After each change of domain, `TEL
 `check-env.sh` enforces most of these:
 
 - [ ] `APP_ENV=production`, `APP_DEBUG=false`, a `base64:` `APP_KEY`, an `https://` `APP_URL`
-- [ ] `.env` is mode 600 and owned by `nsosu`
+- [ ] `.env` is mode 600 and owned by `<user>`
 - [ ] `DB_*`: not root, not the Docker values (`mariadb`/`secret`); `DB_HOST=127.0.0.1`
 - [ ] `SESSION_SECURE_COOKIE=true`, `SESSION_HTTP_ONLY=true`, `SESSION_ENCRYPT=true`, `SESSION_SAME_SITE=lax`
 - [ ] `LOG_STACK=single`, `LOG_LEVEL=warning` (logrotate handles rotation)
@@ -339,17 +336,14 @@ This becomes relevant once M4 ships (#15/#16). After each change of domain, `TEL
 - [ ] Trusted proxies: not needed while OLS terminates TLS directly. If Cloudflare or another proxy is put in front, configure `trustProxies` in `bootstrap/app.php` for the proxy ranges only, never `*`.
 - [ ] HTTPS-only redirect and HSTS are active (see [Web server](#web-server))
 
-## Open decisions
+## Decisions to make
 
-| Decision | Needed for | Status |
+| Decision | Affects | Default in the artifacts |
 |---|---|---|
-| Subdomain | vhost, TLS, `APP_URL` | **decided:** `organizer.nunezserver.online` |
-| Unix user | file isolation | **decided:** `nsosu` (shared with the other sites) |
-| PHP 8.4 path | `PHP_BIN`, `LSPHP_BIN` | **from audit:** `/usr/local/apps/php84/bin/*` |
-| Backup encryption | `BACKUP_ENCRYPTION` | **from audit:** gpg (age not installed) |
-| Mail | `MAIL_*` | **from audit:** local Exim via sendmail; DKIM/SPF to confirm |
+| Subdomain | vhost, TLS, `APP_URL` | `APP_DOMAIN` in `deploy.env` |
+| Separate Webuzo user, or share one with other sites | file isolation | separate user recommended |
 | Staging vhost? | pre-prod releases | none; the restore drill uses `nunezorganizer_restore_test` |
 | systemd or supervisor | queue worker | systemd |
-| Alert email | `CRON_MAILTO` | **owner to set** in `/etc/nunezorganizer/deploy.env` |
-| Off-site backup target | Backuply or `BACKUP_OFFSITE_HOOK` | **owner to decide** |
-| DB session timezone | ADR 0003 correctness | **app fix needed** ([Before go-live](#before-go-live)) |
+| Alert email | `CRON_MAILTO` | empty (no alerts) |
+| Off-site backups | Backuply or `BACKUP_OFFSITE_HOOK` | none: decide before go-live |
+| Mail deliverability | DKIM/SPF for the From domain | local Exim via `sendmail` |

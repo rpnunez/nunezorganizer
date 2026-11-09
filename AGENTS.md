@@ -9,7 +9,7 @@ You are working on **NunezOrganizer** (`rpnunez/nunezorganizer`), a standalone, 
 
 ## Stack & commands
 - PHP **^8.4**, Laravel **13**, Livewire 4 + Flux, Fortify, MariaDB **10.11**. Tests run on MariaDB, never SQLite.
-- Docker: `docker compose up -d`, then prefix commands with `docker compose run --rm app`.
+- Docker: `docker compose up -d`, first run `docker compose exec app php setup.php`, then prefix commands with `docker compose exec app` (see `docs/development.md`). Any other environment: `php setup.php` (`docs/install.md`).
 
 | Purpose | Command |
 |---|---|

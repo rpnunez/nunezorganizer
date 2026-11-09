@@ -1,6 +1,6 @@
 # deploy/
 
-Deployment artifacts for running NunezOrganizer on the DevStackTips VPS, isolated from WordPress (issue #21). The procedure is in **[docs/runbook.md](../docs/runbook.md)**.
+Production deployment tooling for NunezOrganizer (issue #21): zero-downtime releases, rollback, encrypted backups and monitoring, on any Linux host. Start with **[docs/install.md](../docs/install.md)**. [docs/runbook.md](../docs/runbook.md) is a worked example on a Webuzo + OpenLiteSpeed host. For a simple single-directory install, `php setup.php --env=production` at the repo root is enough.
 
 **Artifacts only. Nothing here deploys anything unless an operator runs it on the server.**
 
@@ -21,14 +21,19 @@ deploy/
 │   ├── healthcheck.sh          # cron health check (HTTP, queue, disk, backup age)
 │   └── lib.sh                  # shared helpers
 ├── templates/
-│   ├── openlitespeed/          # vhconf.conf + httpd_config snippet (applied by hand / via Webuzo)
+│   ├── nginx/                  # nginx vhost (HTTPS, headers, $realpath_root for symlinked releases)
+│   ├── apache/                 # Apache 2.4 vhost (mod_proxy_fcgi)
+│   ├── php-fpm/                # PHP-FPM pool running as the app user
+│   ├── openlitespeed/          # vhconf.conf + httpd_config snippet (applied by hand / via a panel)
 │   ├── systemd/                # queue worker unit (hardened)
 │   ├── supervisor/             # alternative queue worker config
 │   ├── cron/                   # schedule:run, nightly backup, health check
 │   ├── logrotate/
-│   ├── sudoers/                # only: app user may run `lswsctrl restart`
+│   ├── sudoers/                # only: app user may run WEB_RELOAD_PRIVILEGED_CMD
 │   └── env/production.env.tpl  # production .env skeleton
-└── tests/run.sh                # offline test suite (stubs for php/composer/npm/db/curl)
+└── tests/
+    ├── run.sh                  # offline test suite (stubs for php/composer/npm/db/curl)
+    └── setup.sh                # setup.php tests (run by run.sh)
 ```
 
 ## Tests
