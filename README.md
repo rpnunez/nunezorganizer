@@ -43,6 +43,40 @@ composer setup
 composer dev
 ```
 
+### Windows + XAMPP (verified setup)
+
+XAMPP ships PHP 8.2, which is too old for Laravel 13. Keep it, and put the official **PHP 8.4 NTS x64** build from [windows.php.net](https://windows.php.net/download/) next to it, e.g. in `C:\xampp\php84`. Copy `php.ini-development` to `php.ini` and enable `curl`, `fileinfo`, `intl`, `mbstring`, `openssl`, `pdo_mysql`, `sodium`, `zip`, with `memory_limit = 1G`. XAMPP's bundled **MariaDB 10.4** (port 3306) works for development.
+
+```sql
+-- as MariaDB root (XAMPP: C:\xampp\mysql\bin\mysql.exe -u root)
+CREATE DATABASE nunezorganizer CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE nunezorganizer_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'nunezorganizer'@'localhost' IDENTIFIED BY 'secret';
+CREATE USER 'nunezorganizer'@'127.0.0.1' IDENTIFIED BY 'secret';
+GRANT ALL ON nunezorganizer.* TO 'nunezorganizer'@'localhost', 'nunezorganizer'@'127.0.0.1';
+GRANT ALL ON nunezorganizer_test.* TO 'nunezorganizer'@'localhost', 'nunezorganizer'@'127.0.0.1';
+```
+
+Then, with `DB_HOST=127.0.0.1` and `MAIL_MAILER=log` in `.env`:
+
+```bash
+C:/xampp/php84/php.exe C:/ProgramData/ComposerSetup/bin/composer.phar install
+C:/xampp/php84/php.exe artisan key:generate
+C:/xampp/php84/php.exe artisan migrate --seed
+npm ci && npm run build
+C:/xampp/php84/php.exe artisan serve        # http://127.0.0.1:8000
+```
+
+> GitHub Actions is currently disabled for this repository, so these local runs are how PRs are verified. Use the "Run CI locally" steps below with `C:/xampp/php84/php.exe` in place of `php`.
+
+## API
+
+Token-authenticated JSON API at `/api/v1`. See [docs/api.md](docs/api.md).
+
+```bash
+php artisan nunez:token you@example.com --ability=tasks:read --ability=tasks:write
+```
+
 ## Users and invitations
 
 Registration is **invite-only** by default (`NUNEZ_REGISTRATION_MODE=invite`).
