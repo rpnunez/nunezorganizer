@@ -2,11 +2,16 @@
 
 namespace App\Models;
 
+use App\Domain\Accounts\Actions\CreatePersonalAccount;
+use App\Enums\MembershipStatus;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
@@ -37,6 +42,16 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     use HasFactory, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
 
     /**
+     * Every new user gets a personal account, owner membership and default preferences.
+     */
+    protected static function booted(): void
+    {
+        static::created(function (User $user): void {
+            app(CreatePersonalAccount::class)->handle($user);
+        });
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
@@ -48,6 +63,37 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             'approved_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    /**
+     * @return HasMany<AccountMembership, $this>
+     */
+    public function memberships(): HasMany
+    {
+        return $this->hasMany(AccountMembership::class);
+    }
+
+    /**
+     * Accounts the user is an active member of.
+     *
+     * @return BelongsToMany<Account, $this>
+     */
+    public function accounts(): BelongsToMany
+    {
+        return $this->belongsToMany(Account::class, 'account_memberships')
+            ->wherePivot('status', MembershipStatus::Active->value)
+            ->withPivot('role', 'status')
+            ->withTimestamps();
+    }
+
+    /**
+     * The user's preferences. Tenant-scoped: read it inside a tenant context.
+     *
+     * @return HasOne<UserPreference, $this>
+     */
+    public function preference(): HasOne
+    {
+        return $this->hasOne(UserPreference::class);
     }
 
     /**

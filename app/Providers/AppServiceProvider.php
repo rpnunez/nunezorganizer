@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Domain\Accounts\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +16,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Scoped: reset between HTTP requests and between queued jobs.
+        $this->app->scoped(TenantContext::class);
     }
 
     /**
