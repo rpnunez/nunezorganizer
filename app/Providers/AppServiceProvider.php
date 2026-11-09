@@ -3,11 +3,17 @@
 namespace App\Providers;
 
 use App\Domain\Accounts\TenantContext;
+use App\Domain\Notifications\Listeners\InvalidatePendingDelivery;
+use App\Domain\Notifications\NotificationChannel;
+use App\Domain\Notifications\NullChannel;
+use App\Domain\Scheduling\Events\OccurrenceChanged;
+use App\Integrations\Telegram\TelegramChannel;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
@@ -21,6 +27,7 @@ class AppServiceProvider extends ServiceProvider
     {
         // Scoped: reset between HTTP requests and between queued jobs.
         $this->app->scoped(TenantContext::class);
+        $this->app->bind(NotificationChannel::class, config('services.telegram.token') ? TelegramChannel::class : NullChannel::class);
     }
 
     /**
@@ -30,6 +37,7 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureDefaults();
         $this->configureRateLimiting();
+        Event::listen(OccurrenceChanged::class, InvalidatePendingDelivery::class);
     }
 
     /**
@@ -40,6 +48,7 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('api', fn (Request $request) => Limit::perMinute(120)->by(
             $request->user()?->getAuthIdentifier() ?? $request->ip(),
         ));
+        RateLimiter::for('telegram-webhook', fn (Request $request) => Limit::perMinute(120)->by($request->ip()));
     }
 
     /**
