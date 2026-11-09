@@ -37,7 +37,7 @@ class CancelTask
 
             $locked->occurrences()
                 ->whereIn('state', [OccurrenceState::Scheduled, OccurrenceState::AwaitingResponse])
-                ->update(['state' => OccurrenceState::Cancelled, 'closed_at' => now()]);
+                ->update(['state' => OccurrenceState::Cancelled, 'closed_at' => now(), 'version' => DB::raw('version + 1')]);
 
             Audit::record('task.cancelled', $locked, actor: $actor);
 

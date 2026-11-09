@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\MeController;
+use App\Http\Controllers\Api\V1\OccurrenceController;
 use App\Http\Controllers\Api\V1\TaskController;
 use App\Http\Middleware\EnforceIdempotency;
 use Illuminate\Support\Facades\Route;
@@ -24,5 +25,12 @@ Route::prefix('v1')
             Route::post('tasks', [TaskController::class, 'store'])->name('tasks.store');
             Route::patch('tasks/{task}', [TaskController::class, 'update'])->name('tasks.update');
             Route::post('tasks/{task}/cancel', [TaskController::class, 'cancel'])->name('tasks.cancel');
+            Route::post('tasks/{task}/complete', [TaskController::class, 'complete'])->name('tasks.complete');
+            Route::post('tasks/{task}/completion-time', [TaskController::class, 'correctCompletion'])->name('tasks.completion-time');
+
+            Route::post('tasks/{task}/occurrences', [OccurrenceController::class, 'store'])->name('occurrences.store');
+            Route::patch('occurrences/{occurrence}', [OccurrenceController::class, 'update'])->name('occurrences.update');
+            Route::post('occurrences/{occurrence}/cancel', [OccurrenceController::class, 'cancel'])->name('occurrences.cancel');
+            Route::post('occurrences/{occurrence}/responses', [OccurrenceController::class, 'respond'])->name('occurrences.responses.store');
         });
     });

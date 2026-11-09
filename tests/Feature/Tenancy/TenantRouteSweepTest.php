@@ -3,6 +3,7 @@
 namespace Tests\Feature\Tenancy;
 
 use App\Models\Task;
+use App\Models\TaskOccurrence;
 use App\Models\User;
 use Closure;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -51,6 +52,7 @@ class TenantRouteSweepTest extends TestCase
                 'updated_at' => now(),
             ]),
             'task' => fn (User $bob) => $this->asTenant($bob, fn () => Task::factory()->create())->id,
+            'occurrence' => fn (User $bob) => $this->asTenant($bob, fn () => TaskOccurrence::factory()->create())->id,
         ];
     }
 

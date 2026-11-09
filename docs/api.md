@@ -83,5 +83,45 @@ Task with its `occurrences` (attempt history, oldest first).
 ### `POST /tasks/{id}/cancel`
 Explicit cancellation; idempotent. Cancels pending (`scheduled`/`awaiting_response`) occurrences and keeps past attempts as history. Completed tasks return `409`.
 
+## Scheduling and responses (#9)
+
+All require `tasks:write`. Times follow the same rules as task creation; **times without an offset are interpreted in the block's `timezone`** (or, for `completed_at`, in your profile timezone), using the DST policy below.
+
+### `POST /tasks/{id}/occurrences`
+Schedule another attempt of the **same** task (carryover never duplicates a task).
+```json
+{ "starts_at": "2026-11-10 19:00", "ends_at": "2026-11-10 19:15", "timezone": "America/New_York" }
+```
+`201` → Occurrence. `409` if the task is not open.
+
+### `PATCH /occurrences/{id}`
+Move an **upcoming** block (`state = scheduled`). Bumps `version`, so notifications queued for the old time are discarded. Blocks that already ended are history: schedule a new attempt instead (`409`).
+
+### `POST /occurrences/{id}/cancel`
+Cancel one block; the task stays open. Idempotent.
+
+### `POST /occurrences/{id}/responses`
+```json
+{ "response": "yes" | "no" | "partial", "completed_at": "optional, yes only", "notes": "optional" }
+```
+| Response | Effect |
+|---|---|
+| `yes` | Task → `completed`, block → `finished`, other upcoming blocks of the task → `cancelled`. Punctuality vs. the block's **planned end**: `on_time` (≤ end), `within_grace` (≤ end + your grace, default 15 min), else `late`. |
+| `no` | Block → `missed`; task stays **open** (it will show in the backlog). |
+| `partial` | Progress note; nothing closes. |
+| *(silence)* | Nothing changes; the task stays open. |
+
+`201` with `{response, task, occurrence, replayed:false}`. Send an `Idempotency-Key` header: a retry with the same key returns the original result (`replayed: true`) and never applies twice. A response that can no longer apply (e.g. `no` after the task was completed, or anything on a cancelled task) returns `409`. `completed_at` cannot be in the future.
+
+### `POST /tasks/{id}/complete`
+"I did it" outside a specific prompt. Optional `occurrence_id`, `completed_at`, `notes`. Without `occurrence_id`, the most recent started, still-open block is used to classify punctuality (none → `punctuality: null`).
+
+### `POST /tasks/{id}/completion-time`
+`{ "completed_at": "2026-11-09T15:05:00Z" }`. Corrects when a completed task was actually done. Appends a new response (history is never rewritten), re-classifies punctuality and is audited.
+
+## DST policy
+- A local time that doesn't exist (spring-forward gap, e.g. 02:30 on 2027-03-14 in New York) resolves to the first valid instant after the gap (**03:00**).
+- A local time that happens twice (fall-back, e.g. 01:30 on 2026-11-01 in New York) resolves to its **first** occurrence (EDT).
+
 ### Coming next
-Completion (`POST /tasks/{id}/complete`), occurrence reschedule and responses (#9), `GET /today` and `GET /backlog` (#10).
+`GET /today` and `GET /backlog` (#10).
