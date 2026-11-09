@@ -28,7 +28,7 @@ class Audit
         $event = new AuditEvent;
         $event->forceFill([
             'account_id' => $accountId ?? ($context->has() ? $context->accountId() : null),
-            'actor_user_id' => $actor?->id ?? $context->user()?->id,
+            'actor_user_id' => $actor->id ?? $context->user()?->id,
             'action' => $action,
             'subject_type' => $subject?->getMorphClass(),
             'subject_id' => $subject?->getKey() !== null ? (string) $subject->getKey() : null,
