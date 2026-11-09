@@ -43,6 +43,19 @@ composer setup
 composer dev
 ```
 
+## Users and invitations
+
+Registration is **invite-only** by default (`NUNEZ_REGISTRATION_MODE=invite`).
+
+```bash
+php artisan nunez:invite person@example.com            # prints a single-use link (expires in 7 days)
+php artisan nunez:invite person@example.com --days=2
+php artisan nunez:user:approve person@example.com       # only needed in "approval" mode
+php artisan db:seed                                     # local/testing only: alice@example.test / bob@example.test (password: "password")
+```
+
+Modes: `invite` (default; `/register` returns 404 unless a valid invitation is presented), `approval` (anyone can sign up, but can't use the app until approved), `open` (public sign-up; not recommended before launch).
+
 ## Tests and quality checks
 
 ```bash
@@ -83,4 +96,5 @@ Neither endpoint exposes versions, environment names or error details.
 ## Security
 
 - Never commit `.env` files, Telegram tokens or credentials. This repository is **public**.
-- Registration is invite-only (see issue #4).
+- Registration is invite-only. Invitation tokens are single-use, expire, and are stored only as SHA-256 hashes.
+- Password-reset responses are identical for known and unknown emails (no account enumeration).

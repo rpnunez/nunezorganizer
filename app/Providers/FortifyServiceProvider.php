@@ -4,12 +4,17 @@ namespace App\Providers;
 
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
+use App\Enums\RegistrationMode;
+use App\Http\Responses\GenericPasswordResetLinkResponse;
+use App\Models\Invitation;
 use Illuminate\Auth\Middleware\RequirePassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Laravel\Fortify\Contracts\FailedPasswordResetLinkRequestResponse;
+use Laravel\Fortify\Contracts\SuccessfulPasswordResetLinkRequestResponse;
 use Laravel\Fortify\Fortify;
 use Livewire\Livewire;
 
@@ -28,6 +33,11 @@ class FortifyServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Bound in boot() so these override Fortify's own bindings regardless of provider order.
+        // Identical responses for known and unknown emails (no account enumeration).
+        $this->app->bind(FailedPasswordResetLinkRequestResponse::class, GenericPasswordResetLinkResponse::class);
+        $this->app->bind(SuccessfulPasswordResetLinkRequestResponse::class, GenericPasswordResetLinkResponse::class);
+
         $this->configureActions();
         $this->configureViews();
         $this->configureRateLimiting();
@@ -62,7 +72,26 @@ class FortifyServiceProvider extends ServiceProvider
         Fortify::verifyEmailView(fn () => view('pages::auth.verify-email'));
         Fortify::twoFactorChallengeView(fn () => view('pages::auth.two-factor-challenge'));
         Fortify::confirmPasswordView(fn () => view('pages::auth.confirm-password'));
-        Fortify::registerView(fn () => view('pages::auth.register'));
+        Fortify::registerView(function (Request $request) {
+            $invitation = null;
+            $token = $request->query('invite');
+
+            if (RegistrationMode::current() === RegistrationMode::Invite) {
+                $key = 'register-view|'.$request->ip();
+                abort_if(RateLimiter::tooManyAttempts($key, 20), 429);
+                RateLimiter::hit($key, 60);
+
+                $invitation = Invitation::findUsable($token);
+
+                // Without a valid invitation the registration page does not exist.
+                abort_if($invitation === null, 404);
+            }
+
+            return view('pages::auth.register', [
+                'invitation' => $invitation,
+                'invitationToken' => $invitation ? $token : null,
+            ]);
+        });
         Fortify::resetPasswordView(fn () => view('pages::auth.reset-password'));
         Fortify::requestPasswordResetLinkView(fn () => view('pages::auth.forgot-password'));
     }
