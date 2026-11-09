@@ -3,6 +3,7 @@
 namespace App\Domain\Scheduling\Actions;
 
 use App\Domain\Audit\Audit;
+use App\Domain\Scheduling\LocalTime;
 use App\Domain\Tasks\Exceptions\TaskStateConflict;
 use App\Models\Task;
 use App\Models\TaskOccurrence;
@@ -59,6 +60,7 @@ class ScheduleOccurrence
     {
         $hasOffset = (bool) preg_match('/(Z|[+-]\d{2}:?\d{2})$/i', trim($value));
 
-        return ($hasOffset ? CarbonImmutable::parse($value) : CarbonImmutable::parse($value, $timezone))->utc();
+        // Offset-less local times follow the DST policy in LocalTime (ADR 0003).
+        return $hasOffset ? CarbonImmutable::parse($value)->utc() : LocalTime::toUtc($value, $timezone);
     }
 }
