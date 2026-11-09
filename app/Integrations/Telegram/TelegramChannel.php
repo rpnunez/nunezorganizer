@@ -4,12 +4,14 @@ namespace App\Integrations\Telegram;
 
 use App\Domain\Notifications\DeliveryResult;
 use App\Domain\Notifications\NotificationChannel;
+use App\Domain\Reviews\DailyReviewContent;
 use App\Models\DailyReview;
 use App\Models\NotificationAction;
 use App\Models\NotificationDelivery;
 use App\Models\TaskOccurrence;
 use App\Models\TelegramLink;
 use App\Models\User;
+use App\Models\UserPreference;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -67,6 +69,15 @@ class TelegramChannel implements NotificationChannel
 
     public function sendDailyReview(User $user, DailyReview $review, NotificationDelivery $delivery): DeliveryResult
     {
-        return DeliveryResult::skipped();
+        $link = TelegramLink::query()->where('user_id', $user->id)->where('status', 'active')->first();
+        if ($link === null) {
+            return DeliveryResult::skipped();
+        }
+
+        $timezone = UserPreference::query()->where('user_id', $user->id)->value('timezone') ?: 'UTC';
+        $text = app(DailyReviewContent::class)->build($user, $review, $timezone);
+        $messageId = $this->client->sendMessage($link->telegram_chat_id, $text);
+
+        return $messageId === null ? DeliveryResult::skipped() : DeliveryResult::sent($messageId);
     }
 }

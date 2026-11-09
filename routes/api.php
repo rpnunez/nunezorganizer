@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\DayController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\OccurrenceController;
+use App\Http\Controllers\Api\V1\ReviewController;
 use App\Http\Controllers\Api\V1\TaskController;
 use App\Http\Middleware\EnforceIdempotency;
 use App\Integrations\Telegram\CreatePairingCode;
@@ -26,6 +27,8 @@ Route::prefix('v1')
             Route::get('tasks/{task}', [TaskController::class, 'show'])->name('tasks.show');
             Route::get('today', [DayController::class, 'today'])->name('today');
             Route::get('backlog', [DayController::class, 'backlog'])->name('backlog');
+            Route::get('reviews/today', [ReviewController::class, 'today'])->name('reviews.today');
+            Route::get('progress/weekly', [ReviewController::class, 'weekly'])->name('progress.weekly');
         });
 
         Route::middleware('abilities:tasks:write')->group(function () {

@@ -25,3 +25,8 @@ Schedule::command('nunez:recover-deliveries')
     ->everyFiveMinutes()
     ->withoutOverlapping()
     ->onOneServer();
+
+Schedule::command('nunez:dispatch-reviews')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->onOneServer();

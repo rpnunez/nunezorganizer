@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Domain\Accounts\TenantContext;
 use App\Domain\Notifications\Jobs\SendCompletionPrompt;
+use App\Domain\Notifications\Jobs\SendDailyReview;
 use App\Models\NotificationDelivery;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -20,7 +21,7 @@ class RecoverNotificationDeliveries extends Command
     {
         $rows = DB::table('notification_deliveries')
             ->where('status', 'sending')->where('updated_at', '<=', now()->subMinutes(10))
-            ->get(['id', 'user_id', 'account_id']);
+            ->get(['id', 'user_id', 'account_id', 'kind']);
         $recovered = 0;
 
         foreach ($rows as $row) {
@@ -44,7 +45,11 @@ class RecoverNotificationDeliveries extends Command
                     });
 
                     if ($ready) {
-                        SendCompletionPrompt::dispatch((string) $row->id, $user->id, (string) $row->account_id)->onQueue('notifications');
+                        if ($row->kind === 'daily_review') {
+                            SendDailyReview::dispatch((string) $row->id, $user->id, (string) $row->account_id)->onQueue('notifications');
+                        } else {
+                            SendCompletionPrompt::dispatch((string) $row->id, $user->id, (string) $row->account_id)->onQueue('notifications');
+                        }
                     }
 
                     return $ready ? 1 : 0;
