@@ -105,6 +105,21 @@ class TaskPagesTest extends TestCase
         $this->assertCount(1, $this->aliceTasks()->sole()->occurrences);
     }
 
+    public function test_double_submit_schedules_only_one_attempt(): void
+    {
+        $task = $this->asTenant($this->alice(), fn () => Task::factory()->create());
+
+        Livewire::test('pages::tasks.show', ['task' => $task])
+            ->set('date', '2026-11-11')
+            ->set('start', '08:00')
+            ->set('end', '08:15')
+            ->call('scheduleAttempt')
+            ->call('scheduleAttempt')
+            ->assertHasNoErrors();
+
+        $this->assertCount(1, $this->aliceTasks()->sole()->occurrences);
+    }
+
     public function test_respond_move_and_cancel_blocks_from_the_task_page(): void
     {
         [$task, $past, $upcoming] = $this->asTenant($this->alice(), function () {

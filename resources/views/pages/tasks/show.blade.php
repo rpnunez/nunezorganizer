@@ -12,6 +12,7 @@ use App\Models\Task;
 use App\Models\TaskOccurrence;
 use App\Support\LocalClock;
 use Flux\Flux;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
@@ -58,7 +59,17 @@ new #[Title('Task')] class extends SchedulingPage {
         $this->validate($this->blockRules());
 
         $times = $this->blockTimes($this->date, $this->start, $this->end);
-        if ($this->attempt(fn () => $schedule->handle($this->task, $times['starts_at'], $times['ends_at'], $this->timezone, $this->currentUser()))) {
+        $key = 'web-schedule:'.$this->currentUser()->id.':'.$this->nonce.':'.$this->taskId.':'.hash('sha256', implode('|', $times));
+        if ($this->attempt(function () use ($schedule, $times, $key): void {
+            Cache::lock($key.':lock', 10)->block(5, function () use ($schedule, $times, $key): void {
+                if (Cache::has($key)) {
+                    return;
+                }
+
+                $schedule->handle($this->task, $times['starts_at'], $times['ends_at'], $this->timezone, $this->currentUser());
+                Cache::put($key, true, now()->addHour());
+            });
+        })) {
             Flux::toast(variant: 'success', text: __('Scheduled another attempt.'));
             unset($this->task);
         }
