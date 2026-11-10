@@ -49,6 +49,9 @@ class AppServiceProvider extends ServiceProvider
             $request->user()?->getAuthIdentifier() ?? $request->ip(),
         ));
         RateLimiter::for('telegram-webhook', fn (Request $request) => Limit::perMinute(120)->by($request->ip()));
+        RateLimiter::for('telegram-pairing', fn (Request $request) => Limit::perMinute(5)->by(
+            $request->user()?->getAuthIdentifier() ?? $request->ip(),
+        ));
     }
 
     /**

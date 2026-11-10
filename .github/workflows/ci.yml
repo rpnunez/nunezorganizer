@@ -95,6 +95,9 @@ jobs:
       - name: Pint (code style)
         run: vendor/bin/pint --test
 
+      - name: Blade escaping guard
+        run: php scripts/check-blade-escaping.php
+
       - name: PHPStan / Larastan
         run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G
 

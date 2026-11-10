@@ -40,7 +40,7 @@ Route::prefix('v1')
 
                 return response()->json(['code' => $code, 'expires_in_seconds' => 600,
                     'deep_link' => $username === '' ? null : 'https://t.me/'.$username.'?start='.$code]);
-            })->name('telegram.pairing');
+            })->middleware('throttle:telegram-pairing')->name('telegram.pairing');
 
             Route::delete('telegram/link', function (Request $request, UnlinkTelegram $unlink) {
                 $user = $request->user();

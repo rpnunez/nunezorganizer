@@ -3,6 +3,8 @@
 use App\Domain\Tasks\Exceptions\TaskStateConflict;
 use App\Http\Middleware\EnsureTenant;
 use App\Http\Middleware\EnsureUserIsApproved;
+use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\ThrottlePasswordReset;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -20,9 +22,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->append(SecurityHeaders::class);
         $middleware->web(append: [
             EnsureUserIsApproved::class,
             EnsureTenant::class,
+            ThrottlePasswordReset::class,
         ]);
 
         $middleware->api(append: [
