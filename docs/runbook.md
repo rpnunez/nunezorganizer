@@ -4,6 +4,8 @@ A complete, worked production deployment of NunezOrganizer using the zero-downti
 
 Placeholders: `<user>` is the Webuzo user that owns the site, `<domain>` is the app's hostname (e.g. `organizer.example.com`), and `<parent-domain>` is the domain it's a subdomain of. Replace them everywhere below.
 
+For the v0.1 pilot, the intended `<domain>` is `organizer.nunezserver.online`. No staging vhost is currently available; complete a restore into an isolated scratch database and obtain owner approval before a controlled production pilot. The server profile below is a reference, not a verified inventory of this host.
+
 - [Isolation model](#isolation-model)
 - [Server profile](#server-profile)
 - [Before go-live](#before-go-live)
@@ -297,7 +299,7 @@ Record each drill (date, backup used, table counts, problems) in the release che
   - free disk is at least `HEALTHCHECK_MIN_FREE_MB`
   - the last successful backup is at most `BACKUP_MAX_AGE_HOURS` old
 - It prints (so cron mails `CRON_MAILTO`) only when the state changes, with an hourly reminder while it stays unhealthy. **Set `CRON_MAILTO`, and make sure the server can send mail**, or alerts go nowhere.
-- App-level alarms (`nunez:health`, for stuck notifications and scheduler lag) arrive with M4 (#14/#17). Add that command to cron when it exists.
+- App-level alarms (`nunez:health`, for stuck notifications and scheduler lag) are available. Schedule the command and verify its alert path during deployment.
 
 ## After a reboot
 
