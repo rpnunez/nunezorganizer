@@ -242,7 +242,7 @@ new class extends Component {
                                     class="bg-white p-3 rounded"
                                     :style="($flux.appearance === 'dark' || ($flux.appearance === 'system' && $flux.dark)) ? 'filter: invert(1) brightness(1.5)' : ''"
                                 >
-                                    {!! $qrCodeSvg !!}
+                                    <img src="data:image/svg+xml;base64,{{ base64_encode($qrCodeSvg) }}" alt="{{ __('Two-factor setup QR code') }}" />
                                 </div>
                             </div>
                         @endempty
