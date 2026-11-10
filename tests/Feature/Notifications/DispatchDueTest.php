@@ -107,7 +107,7 @@ class DispatchDueTest extends TestCase
         $this->assertDatabaseHas('notification_deliveries', ['occurrence_id' => $occurrence->id, 'status' => 'cancelled']);
     }
 
-    public function test_stuck_sending_delivery_is_requeued_for_recovery(): void
+    public function test_stuck_sending_delivery_is_marked_uncertain_without_resend(): void
     {
         Queue::fake();
         $alice = $this->alice();
@@ -122,8 +122,33 @@ class DispatchDueTest extends TestCase
 
         $this->artisan('nunez:recover-deliveries')->assertSuccessful();
 
-        $this->assertDatabaseHas('notification_deliveries', ['id' => $delivery->id, 'status' => 'pending']);
-        Queue::assertPushed(SendCompletionPrompt::class, 1);
+        $this->assertDatabaseHas('notification_deliveries', ['id' => $delivery->id, 'status' => 'uncertain', 'last_error_code' => 'uncertain_send']);
+        Queue::assertNotPushed(SendCompletionPrompt::class);
+
+        $this->artisan('nunez:recover-deliveries')->assertSuccessful();
+        Queue::assertNotPushed(SendCompletionPrompt::class);
+        $this->artisan('nunez:health')->expectsOutputToContain('Uncertain deliveries: 1')->assertSuccessful();
+    }
+
+    public function test_stuck_delivery_with_saved_message_id_is_classified_sent(): void
+    {
+        Queue::fake();
+        $alice = $this->alice();
+        $this->asTenant($alice, function (): void {
+            $task = Task::factory()->create();
+            TaskOccurrence::factory()->forTask($task)->at(now()->subHour()->format('Y-m-d H:i:s'))->create();
+        });
+        $this->artisan('nunez:dispatch-due')->assertSuccessful();
+        $delivery = $this->asTenant($alice, fn () => NotificationDelivery::query()->sole());
+        $this->asTenant($alice, fn () => $delivery->forceFill([
+            'status' => 'sending', 'external_message_id' => '123', 'updated_at' => now()->subMinutes(20),
+        ])->save());
+        Queue::fake();
+
+        $this->artisan('nunez:recover-deliveries')->assertSuccessful();
+
+        $this->assertDatabaseHas('notification_deliveries', ['id' => $delivery->id, 'status' => 'sent', 'external_message_id' => '123']);
+        Queue::assertNotPushed(SendCompletionPrompt::class);
     }
 }
 

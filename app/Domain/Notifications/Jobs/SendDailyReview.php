@@ -107,7 +107,8 @@ class SendDailyReview implements ShouldQueue, TenantAware
                 TelegramLink::query()->where('user_id', $user->id)->update(['status' => 'blocked']);
             }
         } catch (Throwable $e) {
-            $delivery->forceFill(['status' => 'pending', 'last_error_code' => 'transient'])->save();
+            $delivery->forceFill(['status' => 'uncertain', 'last_error_code' => 'uncertain_send'])->save();
+            $review->forceFill(['status' => 'uncertain'])->save();
             throw $e;
         }
     }

@@ -62,6 +62,12 @@ Domain services hold business rules. Controllers, Livewire components and Telegr
 
 Delivery is **minute-level best effort**, not hard real-time.
 
+### Uncertain Telegram sends
+
+Telegram does not provide an idempotency key for `sendMessage`. If a worker stops or loses the response after starting a send, the app cannot tell whether Telegram accepted it. To prevent duplicate prompts, an unexpected send exception marks the delivery `uncertain`; recovery also classifies a stale `sending` delivery without an external message ID as `uncertain`. Neither path resends automatically. An explicit 429 response remains `pending` and retries; a known permanent failure remains `failed`. This favors avoiding a duplicate over guaranteeing every prompt is delivered.
+
+Run `php artisan nunez:health` to see uncertain and stuck-sending counts plus up to 20 uncertain delivery IDs, then inspect the delivery and Telegram chat before any manual action. A stuck `sending` delivery may indicate a revoked membership or missing user that recovery could not classify. Do not simply reset an uncertain delivery to `pending`: doing so can duplicate a message. Completion responses and task state remain authoritative even when a prompt is uncertain. Exactly-once external delivery is not guaranteed.
+
 ## Deployment (M6)
 
 The app runs as a separate virtual host on the DevStackTips VPS: AlmaLinux 8.10, **OpenLiteSpeed + LSPHP 8.4**, MariaDB. It has its own Unix user, database user, logs, backups and supervised queue worker. It shares nothing with the WordPress install. See issue #21.

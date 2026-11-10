@@ -3,8 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Domain\Accounts\TenantContext;
-use App\Domain\Notifications\Jobs\SendCompletionPrompt;
-use App\Domain\Notifications\Jobs\SendDailyReview;
+use App\Models\DailyReview;
 use App\Models\NotificationDelivery;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -15,14 +14,14 @@ class RecoverNotificationDeliveries extends Command
 {
     protected $signature = 'nunez:recover-deliveries';
 
-    protected $description = 'Requeue notification deliveries left sending by a stopped worker';
+    protected $description = 'Classify notification deliveries left sending by a stopped worker';
 
     public function handle(TenantContext $tenant): int
     {
         $rows = DB::table('notification_deliveries')
             ->where('status', 'sending')->where('updated_at', '<=', now()->subMinutes(10))
             ->get(['id', 'user_id', 'account_id', 'kind']);
-        $recovered = 0;
+        $classified = 0;
 
         foreach ($rows as $row) {
             $user = User::find((int) $row->user_id);
@@ -31,35 +30,32 @@ class RecoverNotificationDeliveries extends Command
             }
 
             try {
-                $recovered += $tenant->runAs($user, function () use ($row, $user): int {
-                    $ready = DB::transaction(function () use ($row): bool {
+                $classified += $tenant->runAs($user, function () use ($row): int {
+                    return DB::transaction(function () use ($row): int {
                         $delivery = NotificationDelivery::query()->whereKey($row->id)->lockForUpdate()->first();
                         if ($delivery === null || $delivery->status !== 'sending'
                             || $delivery->updated_at->isAfter(now()->subMinutes(10))) {
-                            return false;
+                            return 0;
                         }
 
-                        $delivery->forceFill(['status' => $delivery->external_message_id ? 'sent' : 'pending'])->save();
-
-                        return $delivery->external_message_id === null;
-                    });
-
-                    if ($ready) {
+                        $status = $delivery->external_message_id ? 'sent' : 'uncertain';
+                        $delivery->forceFill([
+                            'status' => $status,
+                            'last_error_code' => $status === 'uncertain' ? 'uncertain_send' : null,
+                        ])->save();
                         if ($row->kind === 'daily_review') {
-                            SendDailyReview::dispatch((string) $row->id, $user->id, (string) $row->account_id)->onQueue('notifications');
-                        } else {
-                            SendCompletionPrompt::dispatch((string) $row->id, $user->id, (string) $row->account_id)->onQueue('notifications');
+                            DailyReview::query()->whereKey($delivery->daily_review_id)->update(['status' => $status]);
                         }
-                    }
 
-                    return $ready ? 1 : 0;
+                        return 1;
+                    });
                 }, (string) $row->account_id);
             } catch (AuthorizationException) {
                 // Membership was revoked after queueing.
             }
         }
 
-        $this->info("Recovered {$recovered} delivery job(s).");
+        $this->info("Classified {$classified} stale delivery attempt(s).");
 
         return self::SUCCESS;
     }

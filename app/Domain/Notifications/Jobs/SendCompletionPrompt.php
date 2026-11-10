@@ -115,7 +115,7 @@ class SendCompletionPrompt implements ShouldQueue, TenantAware
             }
         } catch (Throwable $e) {
             DB::transaction(function () use ($delivery): void {
-                $delivery->forceFill(['status' => 'pending', 'last_error_code' => 'transient'])->save();
+                $delivery->forceFill(['status' => 'uncertain', 'last_error_code' => 'uncertain_send'])->save();
             });
 
             throw $e;

@@ -15,9 +15,20 @@ class NotificationHealth extends Command
     {
         $oldest = DB::table('notification_deliveries')->where('status', 'pending')->min('due_at');
         $failed = DB::table('notification_deliveries')->where('status', 'failed')->count();
+        $uncertain = DB::table('notification_deliveries')->where('status', 'uncertain')->count();
+        $stuckSending = DB::table('notification_deliveries')->where('status', 'sending')
+            ->where('updated_at', '<=', now()->subMinutes(10))->count();
         $failedJobs = DB::table('failed_jobs')->count();
         $this->line('Oldest pending delivery: '.($oldest ?? 'none'));
         $this->line("Failed deliveries: {$failed}; failed jobs: {$failedJobs}");
+        $this->line("Uncertain deliveries: {$uncertain}");
+        $this->line("Stuck sending deliveries: {$stuckSending}");
+        if ($uncertain > 0) {
+            foreach (DB::table('notification_deliveries')->where('status', 'uncertain')
+                ->orderBy('id')->limit(20)->pluck('id') as $id) {
+                $this->line('Uncertain delivery ID: '.$id);
+            }
+        }
 
         return self::SUCCESS;
     }
