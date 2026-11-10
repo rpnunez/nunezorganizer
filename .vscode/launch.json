@@ -1,0 +1,19 @@
+{
+    // Xdebug for the Docker dev environment (docs/development.md#xdebug).
+    // Start "Listen for Xdebug (Docker)", then trigger a session from the browser
+    // (Xdebug helper extension) or the CLI (XDEBUG_TRIGGER=1).
+    // If you change NUNEZ_XDEBUG_PORT in .env, change "port" here too.
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Listen for Xdebug (Docker)",
+            "type": "php",
+            "request": "launch",
+            "port": 9013,
+            "pathMappings": {
+                "/var/www/html": "${workspaceFolder}"
+            },
+            "log": false
+        }
+    ]
+}
